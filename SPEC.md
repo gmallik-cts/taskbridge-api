@@ -26,7 +26,7 @@ The initial implementation is intentionally small:
 - In-process notification creation, represented as persisted database records rather than email, push, or queue infrastructure.
 - Audit reads filtered by project, optional UTC date range, and optional event type.
 
-A milestone entity and its membership/recipient source do not currently exist in the Project API. The next implementation phase must add or expose that information before milestone events can be emitted reliably. This specification defines the contract that phase will implement.
+The Project API now owns a minimal milestone entity and team-member recipient source so milestone events can be emitted reliably. This specification defines the contract implemented by that integration.
 
 ## 2. Architecture and Service Boundaries
 

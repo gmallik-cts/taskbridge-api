@@ -54,4 +54,17 @@ public class TenantContext : ITenantContext
 
         return organizationId != Guid.Empty;
     }
+
+    public bool TryGetActorUserId(out Guid userId)
+    {
+        userId = Guid.Empty;
+        var user = _httpContextAccessor.HttpContext?.User;
+        if (user is null || !user.Identity?.IsAuthenticated == true)
+        {
+            return false;
+        }
+
+        var claim = user.Claims.FirstOrDefault(c => c.Type == "actor_user_id" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier || c.Type == "sub");
+        return claim is not null && Guid.TryParse(claim.Value, out userId) && userId != Guid.Empty;
+    }
 }

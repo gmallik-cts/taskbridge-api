@@ -7,3 +7,5 @@ public sealed class ForbiddenOperationException(string message) : Exception(mess
 public sealed class ResourceNotFoundException(string message) : Exception(message);
 
 public sealed class ConcurrencyConflictException(string message) : Exception(message);
+
+public sealed class IntegrationFailureException(string message) : Exception(message);

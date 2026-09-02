@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TaskBridge.Api.Contracts;
 using TaskBridge.Api.Data;
 using TaskBridge.Api.Middleware;
 using TaskBridge.Api.Security;
@@ -15,6 +16,14 @@ builder.Services.AddDbContext<TaskBridgeDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IProjectService, ProjectService>();
+builder.Services.AddScoped<IMilestoneService, MilestoneService>();
+builder.Services.AddHttpClient<ILifecycleEventPublisher, LifecycleEventPublisher>()
+    .ConfigureHttpClient((serviceProvider, client) =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    client.BaseAddress = new Uri(configuration["NotificationIntegration:BaseUrl"] ?? "https://localhost:7001/");
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 
 var app = builder.Build();
 

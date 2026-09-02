@@ -1529,3 +1529,448 @@ The following work was intentionally deferred:
 - Outbox and retry handling.
 - Production database migrations.
 - Database-level insert-only permissions for audit tables.
+
+## Prompt 10 — Project Lifecycle Integration
+
+### Exact Prompt
+
+Act as a senior .NET backend engineer responsible for integrating the existing
+TaskBridge Project API with the Notification & Audit Service.
+
+Review the following before making changes:
+
+- SPEC.md
+- README.md
+- REVIEW.md
+- PROMPTS.md
+- The existing Project API
+- The Notification & Audit Service implemented under src/notifications/
+- The current solution and tests
+
+The Notification & Audit Service has already been implemented.
+
+Your goal in this step is to implement the minimum required Project lifecycle
+integration so that relevant lifecycle events create immutable audit entries and
+notifications for relevant team members.
+
+Keep the implementation focused on the assignment requirements.
+
+Do not introduce a broad task-management system.
+Do not introduce Kafka, RabbitMQ, Azure Service Bus, event buses, CQRS, MediatR,
+or unnecessary infrastructure.
+
+## 1. Review the existing domain before changing it
+
+First inspect the existing Project, Team, DTO, service, controller, and tenant
+models.
+
+Determine the minimum domain additions required to support the assignment's
+milestone lifecycle events.
+
+Do not assume that a complete Milestone entity or team membership model already
+exists.
+
+If required information is missing, add the minimum explicit domain model and
+relationships necessary to support:
+
+- milestone creation
+- milestone status update
+- milestone deletion
+- identifying relevant team members who should receive notifications
+
+Avoid adding unrelated task-management functionality.
+
+## 2. Milestone lifecycle support
+
+Implement the minimum milestone functionality required for the assignment.
+
+The implementation must support lifecycle events for:
+
+1. Milestone creation.
+2. Milestone status update.
+3. Milestone deletion.
+
+Use typed request and response DTOs.
+
+Apply:
+
+- required-field validation
+- GUID validation
+- enum/status validation
+- tenant isolation
+- Team ownership validation where applicable
+
+Milestones must always belong to Projects within the authenticated organization.
+
+A caller must not be able to create, modify, view, or delete a milestone across
+organization boundaries.
+
+## 3. Team member recipients
+
+Implement or use the minimum model necessary to identify relevant team members
+for notifications.
+
+Requirements:
+
+1. Notification recipients must belong to the relevant team or project context.
+2. Recipient selection must be tenant-safe.
+3. Cross-organization users must never be selected as recipients.
+4. Duplicate recipients must result in at most one notification per event.
+5. Do not trust recipient OrganizationId supplied by clients.
+
+Do not create a complex identity-management system.
+
+If a simple TeamMember relationship is required, keep it limited to what is
+necessary for this assignment.
+
+## 4. Integration contract
+
+Integrate the Project API with the existing Notification & Audit Service using
+the simplest synchronous approach suitable for this repository.
+
+Do not introduce messaging infrastructure.
+
+Use a clear typed integration contract.
+
+The Project API should send the minimum trusted event information required for
+the Notification & Audit Service to create:
+
+- an immutable audit entry
+- notifications for relevant recipients
+
+The event payload must contain the information necessary for:
+
+- Event type
+- Entity type
+- Entity ID
+- Project ID where required
+- Previous state snapshot
+- New state snapshot
+- Trusted actor identity
+- Recipient user IDs
+- A stable event identifier for idempotency if supported by the existing service
+
+Tenant identity and actor identity must remain trusted.
+
+Do not allow a client to spoof OrganizationId or actor identity through the
+integration contract.
+
+## 5. Event behavior
+
+For each successful lifecycle operation:
+
+### Milestone creation
+
+Create:
+
+- an audit entry recording the creation
+- notifications for all relevant distinct team members
+
+The audit entry should capture the previous state as empty or null and the new
+state as the created milestone snapshot.
+
+### Milestone status update
+
+Create:
+
+- an audit entry recording the status change
+- notifications for all relevant distinct team members
+
+The audit entry must capture:
+
+- the previous state
+- the new state
+
+### Milestone deletion
+
+Before deleting the milestone:
+
+1. Capture the existing state.
+2. Determine the relevant tenant-safe recipients.
+3. Create or dispatch the audit event.
+4. Dispatch notifications.
+5. Complete deletion only according to the integration design chosen.
+
+Clearly document the ordering and failure behavior.
+
+Do not silently lose the audit record or incorrectly report success if the
+integration fails.
+
+Choose the simplest reasonable approach and explain any consistency trade-off.
+
+## 6. Failure handling and consistency
+
+The two services are separate applications.
+
+Do not pretend that distributed transactions or exactly-once delivery exist if
+they are not implemented.
+
+Use the current synchronous integration approach honestly.
+
+Requirements:
+
+1. Define how Project API operations behave if Notification & Audit Service is
+   unavailable.
+2. Avoid reporting a successful milestone operation when the chosen contract
+   requires the audit/notification dispatch to succeed.
+3. Use stable event identifiers where the existing Notification & Audit Service
+   supports idempotency.
+4. Do not silently swallow integration failures.
+5. Log meaningful integration failures without exposing sensitive snapshots.
+
+Keep this appropriate for an assessment project.
+
+## 7. Security
+
+Preserve the existing security model.
+
+Requirements:
+
+- OrganizationId comes from trusted authentication context.
+- Actor identity comes from trusted authentication context.
+- Milestone access is tenant filtered.
+- Team recipient selection is tenant filtered.
+- Integration requests must not allow clients to provide authoritative tenant
+  or actor identities.
+- Existing authentication and authorization protections must remain intact.
+
+## 8. Tests
+
+Add tests covering at minimum:
+
+1. Milestone creation creates an audit entry.
+2. Milestone creation dispatches notifications to all relevant distinct team
+   members.
+3. Milestone status update creates an audit entry containing previous and new
+   state.
+4. Milestone status update dispatches notifications.
+5. Milestone deletion creates an audit entry.
+6. Milestone deletion dispatches notifications.
+7. Cross-organization milestone access is prevented.
+8. Cross-organization users are not selected as notification recipients.
+9. Duplicate team members do not receive duplicate notifications for the same
+   event.
+10. Integration failures are handled according to the chosen consistency design.
+
+Reuse existing test infrastructure where possible.
+
+Do not remove or weaken existing tests.
+
+## 9. Documentation
+
+Update only documentation that must change to accurately describe the new
+integration.
+
+Do not yet create IMPACT_ANALYSIS.md.
+
+After implementation, clearly explain:
+
+1. The milestone domain additions.
+2. How relevant team members are determined.
+3. The integration contract.
+4. The event ordering for create, update, and delete.
+5. The failure behavior and consistency trade-off.
+6. How tenant and actor identity are trusted.
+7. Every file created or modified.
+8. Anything intentionally deferred.
+
+## Constraints
+
+1. Keep the implementation minimal.
+2. Preserve the existing Project API and Notification & Audit Service structure.
+3. Do not introduce unnecessary architectural patterns.
+4. Do not introduce asynchronous messaging infrastructure.
+5. Do not implement the MILESTONE_REOPENED scope change yet.
+6. Do not capture actor IP address yet.
+7. Do not create IMPACT_ANALYSIS.md yet.
+8. Do not weaken tenant isolation.
+9. Do not remove existing functionality or tests.
+10. Prefer explicit, understandable code suitable for assessment.
+
+## Verification
+
+After implementation:
+
+1. Build the entire solution.
+2. Run the complete test suite.
+3. Report exact build and test results.
+4. List all files created or modified.
+5. Clearly identify any assumptions or design trade-offs requiring human review.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Role-Based + Decomposition + Constraint + Iterative Refinement
+
+### Rationale
+
+This prompt followed the independent implementation of the Notification & Audit
+Service and focused specifically on integrating Project lifecycle events.
+
+Role-based prompting asked Copilot to approach the work as a senior .NET backend
+engineer responsible for service integration.
+
+Decomposition separated the work into milestone domain support, recipient
+selection, integration contracts, lifecycle event behavior, failure handling,
+security, and testing.
+
+Constraints were used to prevent unnecessary expansion into a full
+task-management domain or distributed messaging architecture.
+
+Iterative refinement was used because the Notification & Audit Service had
+already been implemented and reviewed. This prompt builds on the previous
+implementation rather than regenerating the complete architecture.
+
+### Result
+
+Copilot implemented the minimum milestone lifecycle integration between the
+Project API and the Notification & Audit Service.
+
+Created files:
+
+- Milestone.cs
+- MilestoneDtos.cs
+- LifecycleEventContracts.cs
+- LifecycleEventPublisher.cs
+- MilestoneService.cs
+- MilestonesController.cs
+- MilestoneServiceTests.cs
+
+Modified files included:
+
+- Project database context
+- Tenant context
+- Authentication wiring
+- Exception middleware
+- Exception definitions
+- Team model
+- appsettings configuration
+- README.md
+- SPEC.md
+
+Key implementation changes:
+
+- Added a tenant-isolated Milestone model.
+- Added a minimal TeamMember model for identifying notification recipients.
+- Added typed milestone request and response DTOs.
+- Added milestone API routes and service operations.
+- Added trusted actor identity resolution through the authenticated context.
+- Added an injectable lifecycle event publisher.
+- Added typed lifecycle event contracts.
+- Added synchronous HTTP integration with the Notification & Audit Service.
+- Added stable SourceEventId values to support idempotent event processing.
+- Added audit event snapshots containing lifecycle state information.
+- Added notification recipient selection through tenant-safe TeamMember data.
+- Ensured recipients are distinct so duplicate team membership rows do not result
+  in duplicate notifications.
+- Added tenant isolation for milestone operations and recipient selection.
+
+The lifecycle integration supports:
+
+- Milestone creation.
+- Milestone status updates.
+- Milestone deletion.
+
+For milestone creation:
+
+- The milestone is persisted.
+- A lifecycle event is published.
+- The event creates an audit entry and notifications for relevant distinct team
+  members.
+
+For milestone status updates:
+
+- The milestone change is persisted.
+- The lifecycle event contains previous and new state snapshots.
+- Relevant distinct team members receive notifications.
+
+For milestone deletion:
+
+- The existing milestone state is captured.
+- Relevant recipients are determined.
+- The lifecycle event is published before the milestone is hard deleted.
+- If event publication fails, deletion does not occur.
+
+The implementation intentionally uses synchronous service integration and does
+not claim distributed transaction or exactly-once guarantees.
+
+### Post-Generation Corrections
+
+During implementation and testing, several issues were identified and corrected.
+
+1. Snapshot readability
+
+Initial milestone snapshots serialized enum values numerically.
+
+The implementation was corrected so audit snapshots use readable status names,
+improving audit history clarity.
+
+2. Recipient lookup and cancellation handling
+
+Recipient lookup was initially synchronous and did not propagate the cancellation
+token through event construction and publication.
+
+The implementation was corrected to follow asynchronous I/O conventions and
+propagate cancellation appropriately.
+
+3. Service-to-service actor identity
+
+A static bearer token could not represent the current actor identity for each
+lifecycle event.
+
+The integration was revised to create a short-lived service JWT containing
+trusted server-side organization and actor identity along with a service claim.
+Client-supplied tenant and actor identities remain non-authoritative.
+
+### Human Review
+
+The generated integration was reviewed for:
+
+- Milestone tenant isolation.
+- Correct lifecycle behavior for create, update, and delete.
+- Audit event generation.
+- Previous and new state snapshots.
+- Tenant-safe notification recipient selection.
+- Distinct notification recipients.
+- Cross-organization recipient prevention.
+- Trusted tenant and actor identity.
+- Stable event identifiers for idempotency.
+- Failure behavior for synchronous service integration.
+- Delete ordering.
+- Preservation of existing Project API and Notification Service security.
+
+A key design trade-off was identified:
+
+For milestone creation and updates, the Project API persists the milestone
+change before publishing the integration event. If event publication fails, the
+milestone change may already exist while the caller receives an integration
+failure response.
+
+For milestone deletion, event publication occurs before deletion, so a failed
+integration prevents deletion.
+
+This is an intentional limitation of the simple synchronous integration design.
+Production-grade reliability would require additional infrastructure such as an
+outbox and retry mechanism, which was intentionally outside the assignment
+scope.
+
+### Validation
+
+- Solution build: succeeded.
+- Complete test suite: 26 passed, 0 failed, 0 skipped.
+
+### Deferred Work
+
+The following work remains intentionally deferred:
+
+- MILESTONE_REOPENED support.
+- Actor IP address capture.
+- IMPACT_ANALYSIS.md.
+- Outbox processing.
+- Durable retry handling.
+- Asynchronous messaging infrastructure.
+- Distributed transaction support.
+- Production-grade service-to-service secret management.

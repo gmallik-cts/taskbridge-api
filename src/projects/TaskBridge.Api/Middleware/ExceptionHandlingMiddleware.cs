@@ -34,6 +34,7 @@ public sealed class ExceptionHandlingMiddleware
             ForbiddenOperationException => (StatusCodes.Status403Forbidden, "Forbidden"),
             ResourceNotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
             ConcurrencyConflictException => (StatusCodes.Status409Conflict, "Concurrency conflict"),
+            IntegrationFailureException => (StatusCodes.Status503ServiceUnavailable, "Lifecycle integration unavailable"),
             ArgumentException => (StatusCodes.Status400BadRequest, "Validation failed"),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred")
         };
