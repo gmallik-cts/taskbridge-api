@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\projects\TaskBridge.Api\TaskBridge.Api.csproj" />
+    <ProjectReference Include="..\..\src\notifications\TaskBridge.Notifications.csproj" />
   </ItemGroup>
 
 </Project>

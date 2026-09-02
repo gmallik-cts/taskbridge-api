@@ -1105,3 +1105,427 @@ The specification was reviewed before proceeding to implementation to ensure:
 
 - SPEC.md created successfully.
 - No Project API implementation changes were made in this step.
+
+## Prompt 9 — Notification & Audit Service Implementation
+
+### Exact Prompt
+
+Act as a senior .NET backend engineer.
+
+Implement the Notification & Audit Service according to SPEC.md.
+
+Before making changes, review:
+
+- SPEC.md
+- README.md
+- REVIEW.md
+- PROMPTS.md
+- The existing Project API implementation
+- The current solution and folder structure
+
+The Notification & Audit Service must be implemented under:
+
+src/notifications/
+
+Follow the architecture and constraints documented in SPEC.md.
+
+Do not implement the Project API lifecycle integration yet.
+Do not modify Project API milestone or lifecycle behavior in this step unless a
+small shared contract is absolutely necessary.
+
+The goal of this step is to build the Notification & Audit Service as an
+independently functioning service with its own data access, business logic,
+API endpoints, tenant security, and tests.
+
+## 1. Service structure
+
+Create a clean .NET API service under:
+
+src/notifications/
+
+Use a simple layered structure appropriate for the assignment:
+
+- Models
+- Data
+- Repositories
+- Services
+- Controllers
+- Security
+- DTOs
+
+Do not introduce CQRS, MediatR, message brokers, event buses, or unnecessary
+architectural patterns.
+
+Use the existing solution conventions where practical.
+
+## 2. Data models
+
+Implement an immutable AuditEntry model containing at minimum:
+
+- Id
+- EventType
+- EntityType
+- EntityId
+- ActorUserId
+- ActorOrganizationId
+- PreviousStateSnapshot
+- NewStateSnapshot
+- Timestamp
+
+Add any fields defined in SPEC.md that are necessary for:
+
+- tenant isolation
+- event idempotency
+- traceability
+
+Implement a Notification model containing at minimum:
+
+- Id
+- RecipientUserId
+- EventType
+- ProjectId
+- Message
+- IsRead
+- CreatedAt
+
+Include OrganizationId if required for secure tenant isolation.
+
+Use appropriate .NET and EF Core data types.
+
+## 3. Audit immutability
+
+Audit entries must be immutable after creation.
+
+Enforce this through the service and repository design.
+
+Requirements:
+
+1. There must be no API endpoint for updating an AuditEntry.
+2. There must be no API endpoint for deleting an AuditEntry.
+3. The repository/service API must not expose normal update or delete operations
+   for audit records.
+4. Existing audit records must not be modified when processing new events.
+5. Document or enforce any database-level protection that is reasonable for the
+   current assignment scope.
+
+## 4. Data access and repositories
+
+Use EF Core and implement a dedicated database context for the Notification &
+Audit Service.
+
+Create repository abstractions and implementations appropriate for:
+
+- AuditEntry
+- Notification
+
+Keep repository responsibilities focused on data access.
+
+Do not expose EF Core queries directly from controllers.
+
+## 5. DTOs and validation
+
+Create typed request and response DTOs.
+
+Do not expose database entities directly through API endpoints where avoidable.
+
+Add validation for:
+
+- required fields
+- GUID identifiers
+- event type values
+- date ranges
+- invalid request data
+
+Do not allow clients to control OrganizationId where the authenticated tenant
+context should provide it.
+
+## 6. Authentication and tenant isolation
+
+Implement authentication and tenant isolation consistent with the existing
+Project API where practical.
+
+Requirements:
+
+1. Protected endpoints must require an authenticated caller.
+2. OrganizationId must be obtained from a trusted authenticated claim.
+3. Do not trust OrganizationId supplied through request bodies, route values,
+   query strings, or headers.
+4. Audit history queries must only return records belonging to the authenticated
+   Organization.
+5. Notification queries must only return notifications belonging to the
+   authenticated Organization.
+6. A caller must not be able to access another organization's audit records or
+   notifications by guessing IDs or user IDs.
+7. Notification read operations must enforce both tenant ownership and recipient
+   ownership where appropriate.
+
+Reuse the security approach from the Project API where reasonable, but keep the
+Notification & Audit Service independently runnable.
+
+## 7. Required API endpoints
+
+Implement the following endpoints.
+
+### POST /audit
+
+Create an immutable audit entry.
+
+The endpoint should:
+
+- Validate the request.
+- Obtain tenant identity from the authenticated context.
+- Prevent client-controlled ActorOrganizationId.
+- Persist the audit entry.
+- Return an appropriate response.
+
+### GET /audit/{projectId}
+
+Return audit history for the requested project.
+
+Support filtering by:
+
+- project ID
+- date range
+- event type
+
+Requirements:
+
+- Tenant isolation must always be enforced.
+- Invalid date ranges must be rejected.
+- Results must not expose another organization's audit records.
+
+### GET /notifications/{userId}
+
+Return notifications for the specified user.
+
+Requirements:
+
+- Tenant isolation must be enforced.
+- A caller must not access another organization's notifications.
+- Apply recipient ownership checks where appropriate.
+- Return typed response DTOs.
+
+### PATCH /notifications/{id}/read
+
+Mark a notification as read.
+
+Requirements:
+
+- The notification must belong to the authenticated tenant.
+- The caller must not be able to mark another user's notification as read unless
+  the authorization design explicitly permits it.
+- Repeated requests should be handled safely.
+- Return an appropriate response.
+
+## 8. Error handling and logging
+
+Use consistent error handling.
+
+The service should return appropriate ProblemDetails responses for:
+
+- validation failures
+- authentication failures
+- forbidden access
+- not found resources
+- unexpected errors
+
+Do not expose internal exception details.
+
+Add structured logging where appropriate for meaningful service events and
+unexpected failures.
+
+Do not log sensitive audit snapshots unnecessarily.
+
+## 9. Tests
+
+Add tests for the Notification & Audit Service foundation.
+
+At minimum include tests covering:
+
+1. Audit entry creation.
+2. Audit entry immutability.
+3. Audit filtering by date range.
+4. Audit filtering by event type.
+5. Cross-organization audit access prevention.
+6. Cross-organization notification access prevention.
+7. Notification read ownership checks.
+8. Request validation.
+
+Do not implement Project lifecycle integration tests yet.
+
+## Constraints
+
+1. Follow SPEC.md as the source of design decisions.
+2. Keep the service independently runnable.
+3. Do not implement Kafka, RabbitMQ, Azure Service Bus, or other messaging
+   infrastructure.
+4. Do not implement Project lifecycle integration yet.
+5. Do not add a broad task-management domain outside the assignment scope.
+6. Do not modify existing Project API behavior unnecessarily.
+7. Preserve the existing Project API implementation and tests.
+8. Keep the implementation understandable and suitable for assessment.
+
+## Verification
+
+After implementation:
+
+1. List every file created or modified.
+2. Explain the service architecture.
+3. Explain how audit immutability is enforced.
+4. Explain tenant isolation.
+5. Explain authorization for notification reads.
+6. Explain the data access and repository structure.
+7. Build the entire solution.
+8. Run all tests.
+9. Report the exact build and test results.
+10. Clearly identify anything intentionally deferred to the next integration step.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Role-Based + Decomposition + Specificity + Constraint
+
+### Rationale
+
+This prompt implemented the Notification & Audit Service after the required
+SPEC.md design phase was completed.
+
+Role-based prompting directed Copilot to approach the task as a senior .NET
+backend engineer.
+
+Decomposition divided the implementation into service structure, data models,
+audit immutability, repositories, DTOs, tenant security, API endpoints, error
+handling, logging, and testing.
+
+Specificity was used to explicitly define required data fields, API contracts,
+tenant isolation rules, audit immutability requirements, and authorization
+constraints.
+
+Constraints prevented premature Project lifecycle integration and unnecessary
+infrastructure such as message brokers, CQRS, MediatR, or event buses.
+
+Agent Mode was selected because the implementation required creating and
+coordinating multiple files across a new service, including models, EF Core
+data access, repositories, services, controllers, security components, DTOs,
+and tests.
+
+### Result
+
+Copilot implemented a standalone Notification & Audit Service under
+src/notifications/.
+
+Files created included:
+
+- TaskBridge.Notifications.csproj
+- Program.cs
+- appsettings.json
+- AuditEntry.cs
+- Notification.cs
+- NotificationDbContext.cs
+- AuditDtos.cs
+- NotificationDtos.cs
+- Repository interfaces and EF Core repository implementations
+- AuditService.cs
+- NotificationService.cs
+- Service exception classes
+- JWT and tenant context security components
+- Controllers
+- Centralized exception middleware
+
+Files modified included:
+
+- TaskBridge.sln
+- TaskBridge.Tests.csproj
+
+A new test file was also added:
+
+- NotificationServiceTests.cs
+
+The service implements the required protected endpoints:
+
+- POST /audit
+- GET /audit/{projectId}
+- GET /notifications/{userId}
+- PATCH /notifications/{id}/read
+
+Audit immutability is enforced through:
+
+- Private setters on immutable audit properties.
+- No update API endpoint.
+- No delete API endpoint.
+- No normal update or delete repository methods for audit records.
+- Insert-only audit persistence through repository and service contracts.
+- Unique source event constraints for idempotency.
+- Unique audit entry and recipient constraints to prevent duplicate notification
+  records during retries.
+
+Tenant isolation is enforced by obtaining OrganizationId from trusted JWT claims
+through ITenantContext and applying tenant predicates to repository operations.
+
+Notification access requires matching organization ownership and recipient
+ownership where appropriate.
+
+During implementation, a contract conflict was identified regarding duplicate
+recipient IDs. The specification suggested rejecting duplicate recipients, while
+the dispatch requirement required each distinct recipient to receive only one
+notification.
+
+This was resolved by accepting valid duplicate recipient IDs and deduplicating
+them before persistence.
+
+A security hardening issue was also identified during implementation. The audit
+creation path initially accepted an ActorUserId that could differ from the
+authenticated caller. The implementation was corrected so the actor identity is
+bound to trusted authentication context rather than blindly accepting a
+client-supplied actor identity.
+
+### Human Review
+
+The generated implementation was reviewed against the specification and
+assignment requirements.
+
+The following areas were specifically checked:
+
+- Audit records have no update or delete API operations.
+- Audit repository and service contracts do not expose normal modification or
+  deletion operations.
+- Tenant identity is obtained from trusted JWT claims.
+- Client-controlled ActorOrganizationId is not trusted.
+- Cross-organization audit access is prevented through tenant filtering.
+- Cross-organization notification access is prevented.
+- Notification read operations require appropriate recipient ownership.
+- Required audit and notification endpoints are present.
+- EF Core data access is separated from controllers through repositories.
+- Audit filtering supports project ID, date range, and event type.
+- The Notification & Audit Service remains independently runnable.
+- Project lifecycle integration was intentionally deferred.
+
+Human review also identified and corrected a security issue where ActorUserId
+needed to be derived from the authenticated caller rather than allowing an
+untrusted request value to determine the actor.
+
+### Validation
+
+- Command: dotnet build TaskBridge.sln
+- Result: succeeded
+
+- Command: dotnet test TaskBridge.sln --no-build
+- Result: 21 passed, 0 failed
+
+### Deferred Work
+
+The following work was intentionally deferred:
+
+- Project lifecycle event publishing and integration.
+- Milestone lifecycle event handling.
+- Triggering audit entries from Project Service lifecycle operations.
+- Triggering notifications from Project Service lifecycle operations.
+- End-to-end integration tests between the Project API and Notification &
+  Audit Service.
+- Messaging infrastructure.
+- Outbox and retry handling.
+- Production database migrations.
+- Database-level insert-only permissions for audit tables.

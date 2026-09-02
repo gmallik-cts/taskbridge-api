@@ -2,3 +2,5 @@ src/projects/TaskBridge.Api/bin
 src/projects/TaskBridge.Api/obj
 tests/TaskBridge.Tests/bin
 tests/TaskBridge.Tests/obj
+src/notifications/bin
+src/notifications/obj
