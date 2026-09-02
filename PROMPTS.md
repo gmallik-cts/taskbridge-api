@@ -257,3 +257,252 @@ Validation succeeded. The solution built successfully and all tests passed:
 
 The repository structure is now aligned with the intended `src/projects`,
 `src/notifications`, and `tests` boundaries.
+
+## Prompt 5 — Authentication, Authorization, and Trusted Tenant Context
+
+### Exact Prompt
+
+Act as a senior .NET security engineer.
+
+Implement the security foundation for the TaskBridge Project API.
+
+The solution has already been reorganized. The Project API is located at:
+
+src/projects/TaskBridge.Api
+
+Review the current implementation and REVIEW.md before making changes.
+
+Implement:
+
+1. Authentication for the API.
+2. Authorization for Project API endpoints.
+3. A trusted tenant context abstraction that provides the current authenticated
+   user's OrganizationId.
+4. Dependency injection registration for the authentication and tenant context
+   components.
+
+For the current assignment implementation, use JWT Bearer authentication.
+
+The tenant context must obtain OrganizationId from an authenticated JWT claim.
+Do not obtain OrganizationId from request body parameters, query parameters,
+route values, or other client-controlled input.
+
+Create clear abstractions where appropriate, for example:
+
+- `ITenantContext`
+- `TenantContext`
+
+Requirements:
+
+1. Project API endpoints must require authenticated users.
+2. The tenant context must only expose tenant information after authentication.
+3. If the authenticated user does not contain a valid OrganizationId claim,
+   tenant access must fail safely.
+4. Use configuration for JWT settings and do not hard-code secrets in source code.
+5. Register all required services through dependency injection.
+6. Follow the existing repository structure and keep security-related code
+   organized appropriately within the Project API.
+7. Do not yet modify Project entity properties.
+8. Do not yet implement DTOs.
+9. Do not yet refactor repositories or ProjectService.
+10. Do not yet implement Notification or Audit functionality.
+11. Do not remove existing functionality unless required to enforce security.
+
+After implementation:
+
+1. List every file created or modified.
+2. Explain how authentication works.
+3. Explain how OrganizationId is obtained and why it is trusted.
+4. Explain what happens when the OrganizationId claim is missing or invalid.
+5. Build the solution.
+6. Run the existing tests and report the result.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Role-based + Specificity + Decomposition + Constraint
+
+### Rationale
+
+A role-based prompt was used to position Copilot as a senior .NET security
+engineer. The security work was decomposed from later remediation tasks so that
+authentication and trusted tenant identity could be implemented and validated
+independently.
+
+Specific requirements defined JWT Bearer authentication and required
+OrganizationId to come only from a validated authenticated JWT claim.
+Constraints prevented unrelated changes such as DTO implementation, repository
+refactoring, Project entity changes, and Notification or Audit implementation.
+
+Agent Mode was selected because the task required creating security-related
+classes, modifying application configuration, registering services, and updating
+the API pipeline.
+
+### Result
+
+Copilot implemented the security foundation for the Project API.
+
+The implementation added JWT Bearer authentication and authorization and
+protected the Project API endpoints using the `TenantAccess` authorization
+policy.
+
+A trusted tenant abstraction was created using `ITenantContext` and
+`TenantContext`. The tenant context obtains OrganizationId from the authenticated
+user's JWT claim rather than from request body data, query parameters, route
+values, headers, or other client-controlled input.
+
+The implementation created:
+
+- `JwtOptions.cs`
+- `ITenantContext.cs`
+- `TenantContext.cs`
+- `AuthenticationExtensions.cs`
+- `TenantContextTests.cs`
+
+The implementation modified:
+
+- `Program.cs`
+- `ProjectsController.cs`
+- `TaskBridge.Api.csproj`
+- `appsettings.json`
+- `appsettings.Development.json`
+
+The application pipeline now includes authentication before authorization.
+
+Validation succeeded using fresh commands:
+
+- `dotnet build TaskBridge.sln --nologo` — succeeded
+- `dotnet test --nologo --verbosity minimal` — 7 succeeded, 0 failed, 0 skipped
+
+A follow-up human review of the authorization policy is required to verify that
+an OrganizationId claim containing an invalid GUID cannot pass authorization
+merely because the claim exists.
+
+## Prompt 5A — Validate OrganizationId Claim in TenantAccess Policy
+
+### Exact Prompt
+
+Act as a senior .NET security engineer.
+
+Perform a focused security refinement of the existing TenantAccess authorization
+policy.
+
+During human review, the current policy was found to require that the user is
+authenticated and that the OrganizationId claim exists, but it does not verify
+that the OrganizationId claim value is a valid GUID.
+
+The current policy is conceptually:
+
+policy.RequireAuthenticatedUser()
+      .RequireClaim(jwtOptions.OrganizationIdClaimType);
+
+Update the authorization implementation so that TenantAccess is granted only
+when all of the following are true:
+
+1. The user is authenticated.
+2. The configured OrganizationId claim exists.
+3. The OrganizationId claim value is a valid Guid.
+
+The implementation must fail closed. A missing, empty, or invalid OrganizationId
+claim must not satisfy TenantAccess.
+
+Requirements:
+
+1. Reuse the configured OrganizationId claim type from JwtOptions.
+2. Do not hard-code the claim name.
+3. Keep the existing JWT authentication configuration unchanged unless required
+   for this specific fix.
+4. Do not modify Project business logic.
+5. Do not implement DTOs, repository changes, validation changes, audit
+   functionality, pagination, or concurrency changes.
+6. Add or update tests covering:
+   - a valid OrganizationId claim,
+   - a missing OrganizationId claim,
+   - an invalid OrganizationId claim.
+7. Build the solution and run all tests.
+
+After completing the change:
+
+1. Explain exactly how the policy now validates the claim.
+2. List every file modified.
+3. Report the build and test results.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Iterative Refinement + Specificity + Constraint + Role-Based Prompting
+
+### Rationale
+
+This prompt was created after human review identified a security gap in the
+initial TenantAccess authorization policy. The original implementation verified
+that the OrganizationId claim existed but did not verify that its value was a
+valid GUID.
+
+Iterative refinement was used to correct only the identified issue rather than
+regenerating the complete security implementation.
+
+Specific requirements defined exactly when authorization should succeed:
+the user must be authenticated, the configured OrganizationId claim must exist,
+and the claim value must be a valid GUID.
+
+Constraints were included to prevent unrelated changes to Project business logic,
+DTOs, repositories, validation, audit functionality, pagination, or concurrency.
+
+A role-based prompt was used to focus Copilot on secure .NET authorization
+practices.
+
+Agent Mode was selected because the task required modifying the existing
+authorization implementation and updating or adding tests.
+
+### Result
+
+The TenantAccess authorization policy was refined following human review.
+
+The policy now requires:
+
+1. An authenticated user.
+2. The configured OrganizationId claim to exist.
+3. The OrganizationId claim value to be successfully parsed as a Guid.
+
+The implementation uses the configured claim type from JwtOptions and does not
+hard-code the OrganizationId claim name.
+
+The authorization policy now fails closed:
+
+- Missing OrganizationId claim → access denied.
+- Empty OrganizationId claim → access denied.
+- Invalid GUID OrganizationId claim → access denied.
+- Valid GUID OrganizationId claim → authorization can succeed.
+
+The validation was added using an authorization assertion that retrieves the
+configured OrganizationId claim and verifies it with Guid.TryParse.
+
+This refinement addressed the security gap identified during human review of
+Prompt #5.
+
+### Human Review Finding
+
+The initial TenantAccess policy required authentication and the presence of an
+OrganizationId claim but did not validate that the claim value was a valid GUID.
+
+Human review identified that an invalid claim value could potentially satisfy
+RequireClaim because the claim existed, even though the TenantContext could not
+successfully parse the value.
+
+A focused iterative refinement was therefore performed to ensure invalid tenant
+identifiers fail authorization before access is granted.
+
+### Validation
+
+Build and test results should be recorded here using the results reported by
+Copilot after Prompt #5A.
+
+- Build: succeeded
+- Tests: all tests passed

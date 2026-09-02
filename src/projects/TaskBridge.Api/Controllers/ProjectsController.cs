@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskBridge.Api.Models;
 using TaskBridge.Api.Services;
@@ -5,6 +6,7 @@ using TaskBridge.Api.Services;
 namespace TaskBridge.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = "TenantAccess")]
 [Route("api/[controller]")]
 public class ProjectsController : ControllerBase
 {
