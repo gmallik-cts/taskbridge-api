@@ -1974,3 +1974,339 @@ The following work remains intentionally deferred:
 - Asynchronous messaging infrastructure.
 - Distributed transaction support.
 - Production-grade service-to-service secret management.
+## Prompt 11 — Scope Change Impact Analysis
+
+### Exact Prompt
+
+Act as a senior .NET software architect performing a change impact analysis.
+
+Do not implement any code changes.
+
+A new scope change has been requested for the TaskBridge application:
+
+1. Add support for a new lifecycle event named MILESTONE_REOPENED.
+2. The event must create an immutable audit entry.
+3. Relevant team members must receive notifications.
+4. Audit records must capture the actor's IP address for this event and the
+   audit model must be evaluated for supporting IP address capture consistently.
+
+Before writing the analysis, review:
+
+- SPEC.md
+- README.md
+- REVIEW.md
+- PROMPTS.md
+- The existing Project API implementation
+- The Milestone domain and lifecycle implementation
+- The Notification & Audit Service
+- The lifecycle event contracts and publisher
+- The current test suite
+
+Create a new file named:
+
+IMPACT_ANALYSIS.md
+
+Do not modify any existing source code.
+Do not modify SPEC.md.
+Do not modify README.md.
+Do not modify the database models.
+Do not add MILESTONE_REOPENED to enums or constants yet.
+Do not add tests yet.
+
+The purpose of this step is to analyze the impact before implementation.
+
+The IMPACT_ANALYSIS.md must include the following sections.
+
+# 1. Change Summary
+
+Describe the requested scope change clearly.
+
+Explain that the change introduces:
+
+- A new MILESTONE_REOPENED lifecycle event.
+- Audit logging for the event.
+- Notifications for relevant team members.
+- Actor IP address capture.
+
+# 2. Current Architecture Impact
+
+Identify the existing components that may be affected.
+
+Review the current implementation and identify specific likely files, classes,
+or layers involved, including where applicable:
+
+- Milestone model and status/lifecycle rules.
+- Milestone DTOs.
+- Milestone service.
+- Milestone controller.
+- Lifecycle event contracts.
+- Lifecycle event publisher.
+- Tenant context.
+- Authentication and actor identity.
+- Notification & Audit Service DTOs.
+- AuditEntry model.
+- Audit repository.
+- Audit service.
+- Notification service.
+- Controllers.
+- Database context and migrations.
+- Exception handling.
+- Tests.
+- Documentation.
+
+Do not invent files that do not exist.
+
+# 3. Functional Impact
+
+Analyze how MILESTONE_REOPENED should fit into the existing lifecycle.
+
+Determine:
+
+- What milestone state or states can be reopened.
+- What state results from reopening.
+- Whether reopening should be rejected for invalid lifecycle states.
+- What previous state snapshot should contain.
+- What new state snapshot should contain.
+- How the event should be named consistently with existing event types.
+- Which team members should receive notifications.
+
+Identify any assumptions requiring human product decisions.
+
+# 4. API Impact
+
+Identify the API changes required.
+
+Evaluate whether the feature should use:
+
+- A dedicated endpoint, for example:
+  POST /api/milestones/{id}/reopen
+
+or:
+
+- An extension of an existing milestone update operation.
+
+Recommend the simplest approach consistent with the existing API design.
+
+Identify:
+
+- Request shape.
+- Response shape.
+- Authentication requirements.
+- Tenant isolation requirements.
+- Validation requirements.
+- Error behavior.
+
+# 5. Audit Model Impact
+
+Analyze the addition of actor IP address.
+
+Determine:
+
+- Whether ActorIpAddress should be added to AuditEntry.
+- Whether the field should be nullable.
+- What format should be stored.
+- How IPv4 and IPv6 should be supported.
+- Which layer should resolve the IP address.
+- How the IP address should travel through the lifecycle integration contract.
+- Whether clients must be prevented from supplying arbitrary IP addresses.
+
+Consider reverse proxies and forwarded headers.
+
+Do not assume that an HTTP header supplied by an untrusted client is automatically
+a trusted source of client IP information.
+
+Identify privacy and logging considerations.
+
+# 6. Security Impact
+
+Analyze security implications.
+
+Include:
+
+- Tenant isolation.
+- Trusted actor identity.
+- Trusted actor IP address.
+- Client spoofing risks.
+- Service-to-service identity propagation.
+- Cross-organization milestone access.
+- Cross-organization notification recipients.
+- Authorization for reopening a milestone.
+
+Identify any new attack or spoofing risks introduced by the change.
+
+# 7. Data and Migration Impact
+
+Analyze:
+
+- AuditEntry schema changes.
+- Database migration requirements.
+- Existing audit records and backward compatibility.
+- Whether ActorIpAddress should allow null for historical records.
+- Index requirements, if any.
+- Any impact on unique SourceEventId behavior.
+
+# 8. Notification Impact
+
+Analyze:
+
+- Whether existing recipient selection can be reused.
+- Whether MILESTONE_REOPENED requires a new notification message template.
+- Whether duplicate recipients remain deduplicated.
+- Whether notification idempotency requires changes.
+
+# 9. Testing Impact
+
+List the tests that will be required.
+
+Include at minimum:
+
+1. Valid milestone reopen creates an audit entry.
+2. Reopen audit entry contains correct previous and new state.
+3. Relevant distinct team members receive notifications.
+4. Cross-organization milestone reopen is prevented.
+5. Invalid lifecycle state cannot be reopened.
+6. Duplicate team members do not receive duplicate notifications.
+7. Actor IP address is captured from the trusted request context.
+8. Client-supplied fake IP address is not treated as authoritative.
+9. Existing audit records remain compatible.
+10. Integration failure behavior is consistent with the existing lifecycle design.
+
+# 10. Recommended Implementation Plan
+
+Provide a step-by-step implementation order.
+
+The implementation plan should minimize risk and preserve the current working
+behavior.
+
+Include:
+
+1. Domain and lifecycle decision.
+2. Audit model and DTO changes.
+3. Database migration.
+4. Trusted IP resolution.
+5. Lifecycle event contract changes.
+6. Milestone API/service changes.
+7. Notification behavior.
+8. Tests.
+9. Documentation.
+10. Full build and test verification.
+
+# 11. Risks and Trade-offs
+
+Document relevant risks and trade-offs.
+
+Include:
+
+- Privacy implications of storing IP addresses.
+- Proxy and forwarded header trust configuration.
+- Synchronous integration limitations.
+- Partial consistency between Project API and Notification & Audit Service.
+- Backward compatibility.
+- Database migration risk.
+- Scope expansion risk.
+
+# 12. Human Decisions Required
+
+Explicitly identify decisions that cannot safely be assumed by Copilot.
+
+Examples may include:
+
+- Which milestone states are eligible for reopening.
+- What status reopening produces.
+- Who is authorized to reopen a milestone.
+- Whether IP addresses should be retained indefinitely.
+- Which reverse proxies are trusted.
+- Whether historical audit records should have null IP addresses.
+
+The analysis should distinguish clearly between:
+
+- Facts discovered from the existing implementation.
+- Recommended design decisions.
+- Assumptions requiring human approval.
+
+After creating IMPACT_ANALYSIS.md:
+
+1. Do not modify implementation code.
+2. List only the files created or modified.
+3. Confirm explicitly that no production source code was changed.
+4. Summarize the highest-risk impacts.
+5. Identify the human decisions that must be made before implementation.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Role-Based + Decomposition + Constraint + Specificity
+
+### Rationale
+
+The assignment introduced a scope change requiring support for
+MILESTONE_REOPENED and actor IP address capture.
+
+Before implementation, Copilot was asked to act as a senior software architect
+and perform a structured impact analysis of the existing codebase.
+
+Decomposition separated the analysis into architecture, functional behavior,
+API design, audit model changes, security, database migration, notification
+behavior, testing, implementation planning, and risks.
+
+Constraints explicitly prohibited implementation changes so that the impact
+analysis remained separate from code generation.
+
+Specificity ensured that the analysis considered tenant isolation, trusted actor
+identity, trusted IP address resolution, service-to-service propagation,
+database compatibility, and existing synchronous integration behavior.
+
+### Result
+
+Created IMPACT_ANALYSIS.md.
+
+Only file created or modified:
+
+IMPACT_ANALYSIS.md
+No production source code, models, enums, constants, tests, SPEC.md, or README.md were changed.
+
+Validation passed: git diff --check, repository status, and file diagnostics.
+
+Highest-risk impacts are trusted proxy/IP handling, reopen authorization and state rules, privacy/retention of IP addresses, cross-service contract compatibility, and synchronous integration failure behavior.
+
+
+### Human Review
+
+The impact analysis was reviewed before implementation.
+
+Particular attention was given to:
+
+- Milestone lifecycle rules for reopening.
+- The target status after reopening.
+- Authorization requirements.
+- Actor IP address trust boundaries.
+- Reverse proxy and forwarded header risks.
+- Privacy implications of storing IP addresses.
+- Backward compatibility for existing audit records.
+- Required database migration.
+- Preservation of tenant isolation.
+- Notification recipient behavior.
+- Consistency with existing synchronous lifecycle integration.
+
+### Validation
+
+This was an analysis-only step.
+
+No implementation code was intentionally changed.
+
+Created IMPACT_ANALYSIS.md.
+
+Only file created or modified:
+
+IMPACT_ANALYSIS.md
+No production source code, models, enums, constants, tests, SPEC.md, or README.md were changed.
+
+Validation passed: git diff --check, repository status, and file diagnostics.
+
+### Deferred Work
+
+Implementation of the scope change was intentionally deferred until the impact
+analysis and human decisions were reviewed.
