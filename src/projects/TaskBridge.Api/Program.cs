@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TaskBridge.Api.Data;
+using TaskBridge.Api.Middleware;
 using TaskBridge.Api.Security;
 using TaskBridge.Api.Services;
 
@@ -16,6 +17,8 @@ builder.Services.AddDbContext<TaskBridgeDbContext>(options =>
 builder.Services.AddScoped<IProjectService, ProjectService>();
 
 var app = builder.Build();
+
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

@@ -506,3 +506,323 @@ Copilot after Prompt #5A.
 
 - Build: succeeded
 - Tests: all tests passed
+
+## Prompt 6 — DTOs, Validation, and Tenant Isolation
+
+### Exact Prompt
+
+Act as a senior .NET API engineer.
+
+Implement the next security and API remediation step for the TaskBridge Project API.
+
+Review the current implementation, REVIEW.md, and the existing authentication and
+tenant context implementation before making changes.
+
+The Project API is located at:
+
+src/projects/TaskBridge.Api
+
+Implement the following related improvements together:
+
+1. Replace direct client binding to the Project entity with request and response DTOs.
+2. Add appropriate validation for Project create and update requests.
+3. Ensure OrganizationId cannot be supplied or controlled by the client.
+4. Apply the trusted ITenantContext to all Project CRUD operations.
+5. Ensure Project data is isolated by OrganizationId.
+
+Requirements:
+
+DTOs:
+
+1. Create appropriate request DTOs for creating and updating a Project.
+2. Create an appropriate response DTO for returning Project data.
+3. Do not expose database entities directly through the API where avoidable.
+4. OrganizationId must not be accepted from the client in create or update request DTOs.
+
+Tenant isolation:
+
+1. When creating a Project, OrganizationId must come from ITenantContext.
+2. Getting a Project by ID must only return the Project if it belongs to the
+   authenticated user's OrganizationId.
+3. Updating a Project must only update a Project belonging to the authenticated
+   user's OrganizationId.
+4. Deleting a Project must only delete a Project belonging to the authenticated
+   user's OrganizationId.
+5. Get-by-team and other collection queries must return only Projects belonging
+   to the authenticated user's OrganizationId.
+6. A user from one Organization must never be able to access another
+   Organization's Project by guessing or supplying its ID.
+
+Validation:
+
+1. Validate required fields.
+2. Validate string lengths where appropriate based on the existing Project model.
+3. Reject invalid input with appropriate validation responses.
+4. Do not rely only on database errors for request validation.
+
+Architecture constraints:
+
+1. Keep the current project structure.
+2. Reuse the existing ProjectService unless a small modification is necessary.
+3. Do not introduce unnecessary architectural patterns.
+4. Do not implement notifications or audit functionality.
+5. Do not implement pagination in this step.
+6. Do not implement optimistic concurrency in this step.
+7. Do not remove existing API functionality unless necessary to enforce security.
+
+Testing:
+
+Add or update tests for:
+
+1. Valid Project creation using OrganizationId from ITenantContext.
+2. Client inability to control OrganizationId through create or update requests.
+3. Tenant isolation when retrieving a Project.
+4. Tenant isolation when updating a Project.
+5. Tenant isolation when deleting a Project.
+6. Validation failures.
+
+After implementation:
+
+1. List every file created or modified.
+2. Explain how OrganizationId is assigned during Project creation.
+3. Explain how tenant isolation is enforced for read, update, and delete operations.
+4. Explain the DTOs and validation approach.
+5. Build the solution.
+6. Run all tests and report the results.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Role-Based + Decomposition + Specificity + Constraint
+
+### Rationale
+
+Several related security findings were combined into one focused implementation
+step to reduce unnecessary iterations.
+
+DTOs, request validation, prevention of client-controlled OrganizationId, and
+tenant isolation are closely related because they define the secure flow of
+data from an API request to the database.
+
+Specific requirements ensured that OrganizationId is obtained only from the
+trusted ITenantContext and that all Project CRUD operations enforce the current
+tenant boundary.
+
+Constraints prevented unrelated changes such as notifications, audit
+functionality, pagination, optimistic concurrency, and unnecessary architectural
+patterns.
+
+Agent Mode was selected because the implementation required coordinated changes
+across DTOs, services, controllers, and tests.
+
+### Result
+
+Copilot implemented the Project API remediation.
+
+Files changed:
+
+- ProjectDtos.cs
+- ProjectService.cs
+- ProjectsController.cs
+- ProjectServiceTests.cs
+
+Key changes:
+
+- Added create, update, and response DTOs.
+- Excluded OrganizationId from request DTOs.
+- Assigned OrganizationId exclusively from ITenantContext.
+- Added tenant filtering to get, collection, update, and delete operations.
+- Added GET /api/projects/{id}.
+- Added full PUT update support.
+- Added required-field, length, GUID, and enum validation.
+- Added tenant isolation tests.
+- Added validation tests.
+
+### Validation
+
+- Solution build: succeeded.
+- Tests: 13 passed, 0 failed.
+
+## Prompt 7 — Reliability, Validation, Pagination, and Optimistic Concurrency
+
+### Exact Prompt
+
+Act as a senior .NET API engineer.
+
+Implement the next and final major reliability remediation step for the
+TaskBridge Project API.
+
+Review the current implementation, REVIEW.md, and the existing Project API
+before making changes.
+
+The Project API is located at:
+
+src/projects/TaskBridge.Api
+
+Implement the following improvements while keeping the implementation simple
+and avoiding unnecessary architectural changes.
+
+1. Centralized error handling
+2. Business validation for tenant-scoped Team references
+3. Pagination for Project collection queries
+4. Optimistic concurrency for Project updates
+
+Centralized error handling:
+
+1. Introduce centralized exception handling.
+2. Remove unnecessary duplicated controller-level exception handling where the
+   centralized mechanism can handle the same failure.
+3. Return consistent HTTP responses for:
+   - validation failures,
+   - not found resources,
+   - unauthorized or forbidden access,
+   - concurrency conflicts,
+   - unexpected errors.
+4. Do not expose internal exception details to API clients.
+
+Business validation:
+
+1. When a Project is created or updated with a TeamId, ensure the referenced
+   Team belongs to the authenticated OrganizationId.
+2. Do not allow a user to associate a Project with a Team from another tenant.
+3. Continue using the trusted ITenantContext as the source of OrganizationId.
+
+Pagination:
+
+1. Add pagination to Project collection queries.
+2. Accept page number and page size parameters.
+3. Validate pagination parameters.
+4. Enforce a reasonable maximum page size.
+5. Return pagination metadata where appropriate.
+6. Do not introduce unnecessary generic pagination frameworks.
+
+Optimistic concurrency:
+
+1. Add an appropriate EF Core optimistic concurrency mechanism to Project.
+2. Ensure update requests contain the information required to detect stale
+   updates.
+3. Detect concurrency conflicts and return an appropriate HTTP conflict response.
+4. Do not silently overwrite another user's newer update.
+5. Keep the implementation simple and appropriate for the existing application.
+
+Constraints:
+
+1. Keep the existing project structure.
+2. Do not implement notification functionality in this step.
+3. Do not implement audit functionality in this step.
+4. Do not introduce CQRS, MediatR, event buses, factories, or unnecessary
+   architectural patterns.
+5. Do not introduce a repository layer in this step.
+6. Preserve the authentication, authorization, DTO, and tenant isolation work
+   already implemented.
+7. Do not remove existing functionality unless required to fix one of the issues
+   described above.
+
+Testing:
+
+Add or update tests for:
+
+1. Invalid or cross-tenant TeamId validation.
+2. Pagination parameter validation.
+3. Pagination behavior.
+4. Optimistic concurrency conflicts.
+5. Appropriate error responses where practical.
+
+After implementation:
+
+1. List every file created or modified.
+2. Explain the centralized error handling approach.
+3. Explain how Team tenant validation is enforced.
+4. Explain the pagination design and maximum page size.
+5. Explain the optimistic concurrency strategy.
+6. Build the solution.
+7. Run all tests and report the results.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Role-Based + Decomposition + Specificity + Constraint
+
+### Rationale
+
+This prompt combined several related reliability and data integrity improvements
+into one implementation step to reduce unnecessary prompt iterations.
+
+Decomposition was used to separate the requirements into centralized error
+handling, tenant-scoped Team validation, pagination, and optimistic concurrency
+while allowing them to be implemented together.
+
+Specificity defined the expected HTTP behavior, pagination constraints, tenant
+boundary requirements, and concurrency conflict behavior.
+
+Constraints prevented unrelated architectural expansion such as CQRS, MediatR,
+event buses, factories, repository abstractions, notification functionality,
+and audit functionality.
+
+Agent Mode was selected because the implementation required coordinated changes
+across the Project model, DTOs, service, controller, database context,
+middleware, and tests.
+
+### Result
+
+Copilot implemented the final reliability remediation for the Project API.
+
+Files modified:
+
+- ProjectsController.cs
+- TaskBridgeDbContext.cs
+- Project.cs
+- ProjectDtos.cs
+- Program.cs
+- ProjectService.cs
+- ProjectServiceTests.cs
+
+Files created:
+
+- ExceptionHandlingMiddleware.cs
+- ProjectExceptions.cs
+- Team.cs
+
+Key changes:
+
+- Added centralized exception handling middleware.
+- Added consistent ProblemDetails responses for validation, authentication,
+  forbidden access, not-found resources, concurrency conflicts, and unexpected
+  errors.
+- Prevented internal exception details from being exposed to API clients.
+- Removed duplicated controller-level exception handling where centralized
+  middleware could handle the failure.
+- Added validation to ensure Team references belong to the authenticated tenant.
+- Missing Teams result in validation errors.
+- Cross-tenant Team references result in 403 Forbidden.
+- Added pagination to Project collection queries.
+- Pagination defaults to pageNumber 1 and pageSize 20.
+- Maximum pageSize is 100.
+- Pagination metadata is returned with collection results.
+- Added an EF Core Guid concurrency token to Project.
+- Update requests must provide the concurrency token.
+- The concurrency token is rotated after successful updates.
+- Stale updates result in 409 Conflict responses.
+- Added tests for cross-tenant Team validation, pagination validation and
+  behavior, and concurrency conflicts.
+
+### Validation
+
+- Build: succeeded.
+- Tests: 17 passed, 0 failed.
+
+### Deployment / Migration Note
+
+The implementation added a Team table and a Project concurrency column.
+
+A database migration will be required before deploying this version against an
+existing PostgreSQL database.
+
+This migration requirement was identified as part of the implementation review
+and should be documented in the final README and deployment instructions.

@@ -18,35 +18,37 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<Project>> CreateProject([FromBody] Project project, CancellationToken cancellationToken)
+    public async Task<ActionResult<ProjectResponse>> CreateProject([FromBody] CreateProjectRequest request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var created = await _projectService.CreateAsync(project, cancellationToken);
-            return CreatedAtAction(nameof(GetByTeam), new { teamId = created.TeamId }, created);
-        }
-        catch (ArgumentException ex)
-        {
-            return ValidationProblem(ex.Message);
-        }
+        var created = await _projectService.CreateAsync(request, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+    }
+
+    [HttpGet("{id:guid}")]
+    public async Task<ActionResult<ProjectResponse>> GetById(Guid id, CancellationToken cancellationToken)
+    {
+        var project = await _projectService.GetByIdAsync(id, cancellationToken);
+        return project is null ? NotFound() : Ok(project);
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ProjectResponse>> UpdateProject(Guid id, [FromBody] UpdateProjectRequest request, CancellationToken cancellationToken)
+    {
+        var updated = await _projectService.UpdateAsync(id, request, cancellationToken);
+        return updated is null ? NotFound() : Ok(updated);
     }
 
     [HttpPatch("{id:guid}/status")]
-    public async Task<ActionResult<Project>> UpdateStatus(Guid id, [FromBody] ProjectStatus status, CancellationToken cancellationToken)
+    public async Task<ActionResult<ProjectResponse>> UpdateStatus(Guid id, [FromBody] UpdateProjectStatusRequest request, CancellationToken cancellationToken)
     {
-        var project = await _projectService.UpdateStatusAsync(id, status, cancellationToken);
-        if (project is null)
-        {
-            return NotFound();
-        }
-
-        return Ok(project);
+        var project = await _projectService.UpdateStatusAsync(id, request, cancellationToken);
+        return project is null ? NotFound() : Ok(project);
     }
 
     [HttpGet("team/{teamId:guid}")]
-    public async Task<ActionResult<List<Project>>> GetByTeam(Guid teamId, CancellationToken cancellationToken)
+    public async Task<ActionResult<PagedProjectResponse>> GetByTeam(Guid teamId, [FromQuery] int pageNumber = 1, [FromQuery] int pageSize = 20, CancellationToken cancellationToken = default)
     {
-        var projects = await _projectService.GetByTeamAsync(teamId, cancellationToken);
+        var projects = await _projectService.GetByTeamAsync(teamId, pageNumber, pageSize, cancellationToken);
         return Ok(projects);
     }
 
@@ -54,11 +56,6 @@ public class ProjectsController : ControllerBase
     public async Task<ActionResult> DeleteProject(Guid id, CancellationToken cancellationToken)
     {
         var deleted = await _projectService.DeleteAsync(id, cancellationToken);
-        if (!deleted)
-        {
-            return NotFound();
-        }
-
-        return NoContent();
+        return deleted ? NoContent() : NotFound();
     }
 }

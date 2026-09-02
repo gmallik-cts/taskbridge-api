@@ -17,6 +17,7 @@ public class Project
     public string Name { get; set; } = string.Empty;
     public string? Description { get; set; }
     public ProjectStatus Status { get; set; } = ProjectStatus.Draft;
+    public Guid ConcurrencyToken { get; set; } = Guid.NewGuid();
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAtUtc { get; set; } = DateTime.UtcNow;
 }
