@@ -76,6 +76,31 @@ public sealed class NotificationServiceTests
         await Assert.ThrowsAsync<ArgumentException>(() => service.GetProjectAsync(Guid.NewGuid(), DateTime.UtcNow, DateTime.UtcNow.AddMinutes(-1), null, 1, 20, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task CreateAsync_ShouldPersistReopenEventAndActorIp()
+    {
+        var organizationId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        await using var context = await CreateContextAsync();
+        var service = CreateAuditService(context, organizationId, actorId);
+        var milestoneId = Guid.NewGuid();
+        var request = new CreateAuditRequest
+        {
+            SourceEventId = Guid.NewGuid(), EventType = "MILESTONE_REOPENED", EntityType = "Milestone",
+            EntityId = milestoneId, MilestoneId = milestoneId, ProjectId = Guid.NewGuid(), ActorUserId = actorId,
+            OrganizationId = organizationId, Timestamp = DateTime.UtcNow.AddMinutes(-1), PreviousStateSnapshot = "{\"Status\":\"Completed\"}",
+            NewStateSnapshot = "{\"Status\":\"InProgress\"}", ActorIpAddress = "192.0.2.10", Recipients = new[] { actorId, actorId }
+        };
+
+        var result = await service.CreateAsync(request, CancellationToken.None);
+
+        Assert.Equal("MILESTONE_REOPENED", result.Audit.EventType);
+        Assert.Equal("192.0.2.10", result.Audit.ActorIpAddress);
+        Assert.Single(context.Notifications);
+        Assert.Contains("Completed", result.Audit.PreviousStateSnapshot);
+        Assert.Contains("InProgress", result.Audit.NewStateSnapshot);
+    }
+
     private static CreateAuditRequest CreateRequest(Guid organizationId, Guid actorId, string eventType, DateTime timestamp) => new()
     {
         SourceEventId = Guid.NewGuid(), EventType = eventType, EntityType = "Project", EntityId = Guid.NewGuid(), ProjectId = Guid.NewGuid(), ActorUserId = actorId,

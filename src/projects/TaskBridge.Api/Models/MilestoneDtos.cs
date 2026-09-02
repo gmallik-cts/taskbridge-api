@@ -35,3 +35,8 @@ public sealed class MilestoneResponse
         ConcurrencyToken = milestone.ConcurrencyToken, CreatedAtUtc = milestone.CreatedAtUtc, UpdatedAtUtc = milestone.UpdatedAtUtc
     };
 }
+
+public sealed class ReopenMilestoneRequest
+{
+    [Required] public Guid ConcurrencyToken { get; set; }
+}

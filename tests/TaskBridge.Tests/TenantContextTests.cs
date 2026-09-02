@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Net;
 using Microsoft.AspNetCore.Http;
 using TaskBridge.Api.Security;
 
@@ -39,5 +40,25 @@ public class TenantContextTests
 
         Assert.False(resolved);
         Assert.Equal(Guid.Empty, actualOrganizationId);
+    }
+
+    [Theory]
+    [InlineData("192.0.2.10")]
+    [InlineData("2001:db8::10")]
+    public void ActorIpAddress_ShouldResolveServerConnectionAddress(string address)
+    {
+        var httpContext = new DefaultHttpContext();
+        httpContext.Connection.RemoteIpAddress = IPAddress.Parse(address);
+        var tenantContext = new TenantContext(new HttpContextAccessor { HttpContext = httpContext }, "organization_id");
+
+        Assert.Equal(address, tenantContext.ActorIpAddress);
+    }
+
+    [Fact]
+    public void ActorIpAddress_ShouldBeNullWhenServerConnectionAddressIsUnavailable()
+    {
+        var tenantContext = new TenantContext(new HttpContextAccessor { HttpContext = new DefaultHttpContext() }, "organization_id");
+
+        Assert.Null(tenantContext.ActorIpAddress);
     }
 }

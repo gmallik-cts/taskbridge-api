@@ -17,6 +17,7 @@ public sealed class NotificationDbContext(DbContextOptions<NotificationDbContext
             entity.Property(x => x.EntityType).IsRequired().HasMaxLength(32);
             entity.Property(x => x.PreviousStateSnapshot).HasColumnType("jsonb");
             entity.Property(x => x.NewStateSnapshot).HasColumnType("jsonb");
+            entity.Property(x => x.ActorIpAddress).HasMaxLength(45);
             entity.HasIndex(x => x.SourceEventId).IsUnique();
             entity.HasIndex(x => new { x.ActorOrganizationId, x.ProjectId, x.Timestamp, x.EventType });
         });

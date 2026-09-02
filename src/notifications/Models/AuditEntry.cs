@@ -6,7 +6,8 @@ public sealed class AuditEntry
 
     public AuditEntry(Guid id, Guid sourceEventId, string eventType, string entityType, Guid entityId,
         Guid projectId, Guid? milestoneId, Guid actorUserId, Guid actorOrganizationId,
-        string? previousStateSnapshot, string? newStateSnapshot, DateTime timestamp, DateTime createdAt)
+        string? previousStateSnapshot, string? newStateSnapshot, DateTime timestamp, DateTime createdAt,
+        string? actorIpAddress = null)
     {
         Id = id;
         SourceEventId = sourceEventId;
@@ -19,6 +20,7 @@ public sealed class AuditEntry
         ActorOrganizationId = actorOrganizationId;
         PreviousStateSnapshot = previousStateSnapshot;
         NewStateSnapshot = newStateSnapshot;
+        ActorIpAddress = actorIpAddress;
         Timestamp = timestamp;
         CreatedAt = createdAt;
     }
@@ -36,4 +38,5 @@ public sealed class AuditEntry
     public string? NewStateSnapshot { get; private set; }
     public DateTime Timestamp { get; private set; }
     public DateTime CreatedAt { get; private set; }
+    public string? ActorIpAddress { get; private set; }
 }

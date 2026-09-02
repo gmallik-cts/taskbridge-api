@@ -7,4 +7,5 @@ public interface ITenantContext
     bool TryGetOrganizationId(out Guid organizationId);
 
     bool TryGetActorUserId(out Guid userId) { userId = Guid.Empty; return false; }
+    string? ActorIpAddress => null;
 }

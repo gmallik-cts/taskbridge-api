@@ -2310,3 +2310,478 @@ Validation passed: git diff --check, repository status, and file diagnostics.
 
 Implementation of the scope change was intentionally deferred until the impact
 analysis and human decisions were reviewed.
+
+## Prompt 12 — Implement MILESTONE_REOPENED and Actor IP Capture
+
+### Exact Prompt
+
+Act as a senior .NET backend engineer implementing an approved scope change.
+
+Before making changes, review:
+
+- SPEC.md
+- README.md
+- REVIEW.md
+- PROMPTS.md
+- IMPACT_ANALYSIS.md
+- The existing Project API
+- The existing Milestone lifecycle implementation
+- LifecycleEventContracts.cs
+- LifecycleEventPublisher.cs
+- The Notification & Audit Service
+- Existing tests
+
+The impact analysis has already been completed.
+
+The human reviewer has explicitly approved the decisions documented in:
+
+IMPACT_ANALYSIS.md
+
+Follow those approved decisions. Do not replace them with alternative assumptions.
+
+Your goal is to implement:
+
+1. MILESTONE_REOPENED lifecycle support.
+2. Immutable audit logging for the event.
+3. Notifications for relevant team members.
+4. Actor IP address capture in audit records.
+
+Keep the implementation minimal and consistent with the existing architecture.
+
+Do not introduce messaging infrastructure, an outbox, CQRS, MediatR, or
+unnecessary architectural patterns.
+
+## Approved Human Decisions
+
+The implementation must follow these decisions.
+
+### Milestone lifecycle
+
+1. Only a milestone in the `Completed` state can be reopened.
+2. Reopening changes:
+
+   `Completed` -> `InProgress`
+
+3. A milestone can be reopened again after it has subsequently been completed.
+4. Each successful reopen operation creates a separate lifecycle event and audit
+   record.
+
+### API
+
+Use a dedicated endpoint:
+
+POST /api/milestones/{id}/reopen
+
+The request should contain only information required by the existing concurrency
+design.
+
+The client must not provide authoritative values for:
+
+- OrganizationId
+- ActorUserId
+- ActorIpAddress
+- Arbitrary target status
+
+### Notification recipients
+
+Use all distinct members of the milestone's project team.
+
+The actor should receive a notification if the actor is also a relevant project
+team member.
+
+Duplicate membership data must not create duplicate notifications.
+
+### Actor IP address
+
+1. ActorIpAddress must be nullable.
+2. Historical audit records remain compatible and may have null IP addresses.
+3. Both IPv4 and IPv6 must be supported.
+4. Actor IP must be resolved from trusted server-side request context.
+5. Clients must not provide authoritative IP values through request JSON, query
+   parameters, or arbitrary headers.
+6. Forwarded headers must only be trusted when explicitly configured proxy
+   infrastructure exists.
+7. Actor IP should be propagated once through the authenticated lifecycle event
+   contract.
+8. Do not duplicate ActorIpAddress in both the service JWT and lifecycle event
+   payload.
+
+## 1. Review current implementation
+
+Before editing, inspect the existing:
+
+- Milestone model and status enum.
+- Milestone service.
+- Milestone controller.
+- Milestone DTOs.
+- Tenant context.
+- Lifecycle event contracts.
+- Lifecycle event publisher.
+- AuditEntry model.
+- Audit DTOs.
+- Audit service.
+- Notification service.
+- Database contexts.
+- Exception handling.
+- Existing tests.
+
+Reuse existing patterns where appropriate.
+
+Do not remove or weaken existing behavior.
+
+## 2. Implement milestone reopening
+
+Add support for the event type:
+
+MILESTONE_REOPENED
+
+The implementation must:
+
+1. Load the milestone using the authenticated organization predicate.
+2. Return not found or deny access consistently with existing tenant behavior.
+3. Require the milestone to currently be `Completed`.
+4. Reject reopening from any other state.
+5. Validate the existing concurrency token using the current concurrency design.
+6. Capture the previous milestone snapshot.
+7. Change status to `InProgress`.
+8. Capture the new milestone snapshot.
+9. Generate a stable SourceEventId for the lifecycle event.
+10. Select distinct tenant-safe team recipients.
+11. Publish the lifecycle event using the existing typed integration contract.
+12. Follow the existing synchronous integration consistency approach unless a
+    change is required by the approved decisions.
+
+Do not allow the client to choose the resulting status.
+
+## 3. API endpoint
+
+Add:
+
+POST /api/milestones/{id}/reopen
+
+Use typed request and response DTOs consistent with the existing milestone API.
+
+The endpoint must:
+
+- require authentication;
+- use trusted tenant identity;
+- use trusted actor identity;
+- validate the request;
+- use the existing concurrency mechanism;
+- return consistent success and error responses;
+- reject invalid lifecycle states;
+- preserve tenant isolation.
+
+## 4. Audit event
+
+Successful reopening must create an immutable audit entry.
+
+The event must include:
+
+- EventType = MILESTONE_REOPENED
+- EntityType = milestone
+- EntityId
+- ProjectId
+- Trusted OrganizationId
+- Trusted ActorUserId
+- ActorIpAddress
+- Previous state snapshot
+- New state snapshot
+- Stable SourceEventId
+
+The previous snapshot must show the milestone as `Completed`.
+
+The new snapshot must show the milestone as `InProgress`.
+
+Use readable enum/status values rather than numeric enum serialization.
+
+## 5. Actor IP resolution
+
+Implement the minimum appropriate abstraction for obtaining the actor IP from
+the Project API request context.
+
+The IP source must be server-side.
+
+The client must not be able to provide an authoritative IP address in the
+request DTO.
+
+Support IPv4 and IPv6.
+
+The implementation should:
+
+- obtain the remote IP address from HttpContext connection information;
+- normalize it appropriately;
+- return null when no reliable address is available.
+
+Do not blindly trust X-Forwarded-For.
+
+Only configure forwarded-header processing if the repository already has an
+explicit trusted proxy configuration pattern. Do not invent production proxy
+addresses or broadly trust all forwarded headers.
+
+Keep the IP abstraction easy to test.
+
+## 6. Lifecycle integration contract
+
+Extend the existing lifecycle event contract so ActorIpAddress can be sent from
+the Project API to the Notification & Audit Service.
+
+Requirements:
+
+- ActorIpAddress is nullable.
+- It is sent once in the typed lifecycle event payload.
+- It is not duplicated as a service JWT claim.
+- The receiving Notification & Audit Service accepts the value only from the
+  authenticated Project API integration.
+- Client requests cannot directly construct an authoritative audit event.
+
+Preserve the existing trusted OrganizationId and ActorUserId model.
+
+## 7. Notification & Audit Service changes
+
+Update the Notification & Audit Service as necessary.
+
+The service must:
+
+1. Persist ActorIpAddress in AuditEntry.
+2. Preserve audit immutability.
+3. Preserve existing SourceEventId idempotency.
+4. Continue preventing duplicate notifications for duplicate recipients.
+5. Preserve tenant filtering.
+6. Preserve notification recipient ownership checks.
+
+Do not add audit update or delete operations.
+
+## 8. Database changes
+
+Update the relevant EF Core model and database context.
+
+ActorIpAddress must:
+
+- be nullable;
+- support IPv4 and IPv6;
+- remain compatible with historical audit records.
+
+Create or update database migration artifacts only if this repository already
+uses migrations or the assignment expects them to be committed.
+
+Do not pretend that a migration has been applied if only the code model was
+updated.
+
+Clearly report what deployment database action is required.
+
+## 9. Error behavior
+
+Use existing exception and ProblemDetails conventions.
+
+The following cases must be handled:
+
+- milestone not found;
+- cross-organization access;
+- reopening a milestone not in Completed state;
+- invalid concurrency token;
+- stale concurrency update;
+- lifecycle integration failure;
+- missing actor IP address where the server cannot reliably determine one.
+
+A missing IP address should not prevent the lifecycle operation because
+ActorIpAddress is intentionally nullable.
+
+Do not expose sensitive audit snapshots or internal integration details in error
+responses.
+
+## 10. Tests
+
+Add focused tests for at minimum:
+
+1. Completed milestone can be reopened.
+2. Reopening changes Completed to InProgress.
+3. Reopen creates an audit event with EventType MILESTONE_REOPENED.
+4. Audit event contains the correct previous state.
+5. Audit event contains the correct new state.
+6. Relevant distinct team members receive notifications.
+7. Duplicate team membership does not create duplicate notifications.
+8. Actor receives notification when the actor is a relevant team member.
+9. Cross-organization reopen access is prevented.
+10. Planned milestone cannot be reopened.
+11. InProgress milestone cannot be reopened.
+12. Stale concurrency token is rejected.
+13. Actor IPv4 address is propagated into the lifecycle event.
+14. Actor IPv6 address is supported.
+15. Missing server IP results in a null ActorIpAddress without failing the
+    lifecycle operation.
+16. Client-controlled request data cannot override the authoritative actor IP.
+17. Existing audit functionality remains unchanged.
+18. Existing notification idempotency remains unchanged.
+19. Integration failure follows the documented synchronous consistency behavior.
+
+Reuse existing test infrastructure.
+
+Do not remove or weaken existing tests.
+
+## 11. Documentation
+
+Update documentation only where required to reflect implemented behavior.
+
+Update SPEC.md if its current capability description needs to change.
+
+Update README.md if required.
+
+Update PROMPTS.md only if this repository's workflow already expects generated
+documentation updates there.
+
+Do not modify IMPACT_ANALYSIS.md except to correct factual inaccuracies exposed
+during implementation.
+
+Clearly explain:
+
+- the files created and modified;
+- the reopen lifecycle rule;
+- the trusted IP design;
+- database migration requirements;
+- integration behavior;
+- remaining limitations.
+
+## Constraints
+
+1. Follow the approved human decisions in IMPACT_ANALYSIS.md.
+2. Keep the implementation minimal.
+3. Preserve existing architecture.
+4. Preserve tenant isolation.
+5. Preserve audit immutability.
+6. Do not trust client-supplied tenant, actor, or IP values.
+7. Do not introduce asynchronous messaging infrastructure.
+8. Do not add unrelated milestone features.
+9. Do not weaken existing tests.
+10. Do not implement unrelated scope changes.
+
+## Verification
+
+After implementation:
+
+1. Build the entire solution.
+2. Run the complete test suite.
+3. Report exact build and test results.
+4. List every file created or modified.
+5. Clearly identify any database migration or deployment action required.
+6. Clearly identify any assumptions that differed from IMPACT_ANALYSIS.md.
+7. Explicitly state whether all approved human decisions were followed.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Role-Based + Specificity + Constraint + Decomposition + Iterative Refinement
+
+### Rationale
+
+The implementation followed an impact analysis and explicit human-approved
+decisions rather than allowing Copilot to make product and security decisions
+independently.
+
+The prompt used specificity to preserve the approved lifecycle rule:
+
+Completed -> InProgress
+
+Constraints prevented clients from controlling OrganizationId, ActorUserId,
+ActorIpAddress, or the target milestone status.
+
+Decomposition separated milestone lifecycle implementation, API changes, audit
+changes, trusted IP resolution, integration contracts, database impact, and
+testing.
+
+Iterative refinement was used because this implementation builds directly on
+the architecture and decisions established in the earlier impact analysis.
+
+### Result
+
+Copilot implemented the approved MILESTONE_REOPENED scope change.
+
+The implementation added:
+
+- POST /api/milestones/{id}/reopen.
+- Completed-to-InProgress lifecycle validation.
+- Existing concurrency validation for the reopen operation.
+- Repeat reopen support after a milestone has subsequently been completed.
+- MILESTONE_REOPENED lifecycle event support.
+- Tenant-safe selection of distinct team notification recipients.
+- Nullable trusted actor IP address propagation.
+- IPv4 and IPv6 actor IP support.
+- ActorIpAddress persistence in immutable audit records.
+- MILESTONE_REOPENED audit validation.
+- Idempotency handling consistent with the existing SourceEventId model.
+
+Modified files:
+
+- IMPACT_ANALYSIS.md
+- README.md
+- SPEC.md
+- LifecycleEventContracts.cs
+- MilestonesController.cs
+- MilestoneDtos.cs
+- ITenantContext.cs
+- TenantContext.cs
+- MilestoneService.cs
+- AuditDtos.cs
+- NotificationDbContext.cs
+- AuditEntry.cs
+- AuditService.cs
+- MilestoneServiceTests.cs
+- NotificationServiceTests.cs
+- TenantContextTests.cs
+
+No new files were created.
+
+### Human Review
+
+The implementation was reviewed against the approved decisions in
+IMPACT_ANALYSIS.md.
+
+The review focused on:
+
+- Completed-only reopening.
+- Completed to InProgress transition.
+- Repeat reopen behavior.
+- Dedicated reopen endpoint.
+- Concurrency validation.
+- Trusted tenant identity.
+- Trusted actor identity.
+- Correct MILESTONE_REOPENED event generation.
+- Previous and new lifecycle state handling.
+- Distinct tenant-safe notification recipients.
+- Actor notification behavior when the actor is a relevant team member.
+- IPv4 and IPv6 support.
+- Nullable IP address behavior.
+- Prevention of client-controlled authoritative IP values.
+- Audit immutability.
+- Existing SourceEventId idempotency behavior.
+- Preservation of existing functionality and tests.
+
+### Validation
+
+- Solution build: succeeded.
+- Complete test suite: 35 passed, 0 failed.
+- Diagnostics: no errors.
+
+### Database / Deployment Impact
+
+No EF Core migration artifacts currently exist in the repository.
+
+Deployment to an existing database requires an additive nullable ActorIpAddress
+column in the Notification & Audit Service audit table.
+
+The nullable column preserves compatibility with existing audit records.
+
+### Deferred Work
+
+The following remain outside the current assessment scope:
+
+- Production database migration automation.
+- Production IP address retention policy.
+- Production reverse proxy trust configuration.
+- Outbox processing.
+- Durable retry handling.
+- Asynchronous messaging infrastructure.
+- Distributed transactions.

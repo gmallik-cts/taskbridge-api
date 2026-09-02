@@ -20,11 +20,9 @@ the event must be authorized and tenant-scoped in the Project API, represented
 in the lifecycle contract, accepted and persisted by the Notification & Audit
 Service, and handled idempotently with notification creation.
 
-The event name should be represented consistently as `MILESTONE_REOPENED` at
-the external contract boundary unless the existing PascalCase event convention
-is deliberately retained. The current implementation uses PascalCase strings
-such as `MilestoneCreated` and `MilestoneStatusUpdated`; the exact naming
-decision requires approval before implementation.
+The approved event name is `MILESTONE_REOPENED` at the external contract
+boundary. Existing event strings such as `MilestoneCreated` and
+`MilestoneStatusUpdated` remain unchanged for backward compatibility.
 
 ## 2. Current Architecture Impact
 

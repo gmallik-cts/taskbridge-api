@@ -67,4 +67,6 @@ public class TenantContext : ITenantContext
         var claim = user.Claims.FirstOrDefault(c => c.Type == "actor_user_id" || c.Type == System.Security.Claims.ClaimTypes.NameIdentifier || c.Type == "sub");
         return claim is not null && Guid.TryParse(claim.Value, out userId) && userId != Guid.Empty;
     }
+
+    public string? ActorIpAddress => _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
 }

@@ -13,9 +13,10 @@ public sealed class CreateAuditRequest
     public DateTime Timestamp { get; set; }
     public string? PreviousStateSnapshot { get; set; }
     public string? NewStateSnapshot { get; set; }
+    public string? ActorIpAddress { get; set; }
     public IReadOnlyCollection<Guid>? Recipients { get; set; }
 }
 
-public sealed record AuditResponse(Guid Id, string EventType, string EntityType, Guid EntityId, Guid ActorUserId, Guid ActorOrganizationId, string? PreviousStateSnapshot, string? NewStateSnapshot, DateTime Timestamp);
+public sealed record AuditResponse(Guid Id, string EventType, string EntityType, Guid EntityId, Guid ActorUserId, Guid ActorOrganizationId, string? PreviousStateSnapshot, string? NewStateSnapshot, DateTime Timestamp, string? ActorIpAddress = null);
 public sealed record AuditCreateResponse(AuditResponse Audit, int NotificationCount, bool IsDuplicate = false);
 public sealed record AuditPageResponse(IReadOnlyList<AuditResponse> Items, int PageNumber, int PageSize, int TotalCount, int TotalPages);

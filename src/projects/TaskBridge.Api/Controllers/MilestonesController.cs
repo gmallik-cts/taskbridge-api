@@ -29,6 +29,13 @@ public sealed class MilestonesController(IMilestoneService service) : Controller
         return milestone is null ? NotFound() : Ok(milestone);
     }
 
+    [HttpPost("{id:guid}/reopen")]
+    public async Task<ActionResult<MilestoneResponse>> Reopen(Guid id, ReopenMilestoneRequest request, CancellationToken cancellationToken)
+    {
+        var milestone = await service.ReopenAsync(id, request, cancellationToken);
+        return milestone is null ? NotFound() : Ok(milestone);
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
         await service.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();

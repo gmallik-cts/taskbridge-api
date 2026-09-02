@@ -12,6 +12,7 @@ public interface IMilestoneService
     Task<MilestoneResponse> CreateAsync(CreateMilestoneRequest request, CancellationToken cancellationToken = default);
     Task<MilestoneResponse?> GetAsync(Guid id, CancellationToken cancellationToken = default);
     Task<MilestoneResponse?> UpdateStatusAsync(Guid id, UpdateMilestoneStatusRequest request, CancellationToken cancellationToken = default);
+    Task<MilestoneResponse?> ReopenAsync(Guid id, ReopenMilestoneRequest request, CancellationToken cancellationToken = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }
 
@@ -68,6 +69,28 @@ public sealed class MilestoneService(
         return MilestoneResponse.FromEntity(milestone);
     }
 
+    public async Task<MilestoneResponse?> ReopenAsync(Guid id, ReopenMilestoneRequest request, CancellationToken cancellationToken = default)
+    {
+        var organizationId = GetOrganizationId();
+        var actorUserId = GetActorUserId();
+        if (request is null || request.ConcurrencyToken == Guid.Empty) throw new ArgumentException("A concurrency token is required.");
+        var milestone = await dbContext.Milestones.FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == organizationId, cancellationToken);
+        if (milestone is null) return null;
+        if (milestone.ConcurrencyToken != request.ConcurrencyToken) throw new ConcurrencyConflictException("The milestone was changed by another request.");
+        if (milestone.Status != MilestoneStatus.Completed) throw new ConcurrencyConflictException("Only completed milestones can be reopened.");
+
+        var project = await GetProjectAsync(milestone.ProjectId, organizationId, cancellationToken) ?? throw new ResourceNotFoundException("Project was not found.");
+        var previous = Snapshot(milestone);
+        milestone.Status = MilestoneStatus.InProgress;
+        milestone.ConcurrencyToken = Guid.NewGuid();
+        milestone.UpdatedAtUtc = DateTime.UtcNow;
+        try { await dbContext.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateConcurrencyException) { throw new ConcurrencyConflictException("The milestone was changed by another request."); }
+
+        await PublishAsync(await CreateEventAsync("MILESTONE_REOPENED", milestone, project, actorUserId, previous, Snapshot(milestone), organizationId, cancellationToken), cancellationToken);
+        return MilestoneResponse.FromEntity(milestone);
+    }
+
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var organizationId = GetOrganizationId();
@@ -102,7 +125,7 @@ public sealed class MilestoneService(
             .Where(x => x.TeamId == project.TeamId && x.Team.OrganizationId == organizationId)
             .Select(x => x.UserId).Distinct().ToListAsync(cancellationToken);
         if (recipients.Count == 0) throw new ArgumentException("The project team has no notification recipients.");
-        return new LifecycleEvent(Guid.NewGuid(), eventType, "Milestone", milestone.Id, project.Id, milestone.Id, actorUserId, organizationId, DateTime.UtcNow, previous, next, recipients);
+        return new LifecycleEvent(Guid.NewGuid(), eventType, "Milestone", milestone.Id, project.Id, milestone.Id, actorUserId, organizationId, DateTime.UtcNow, previous, next, recipients, tenantContext.ActorIpAddress);
     }
 
     private Guid GetOrganizationId() => tenantContext.TryGetOrganizationId(out var id) ? id : throw new AuthenticationRequiredException("An authenticated organization is required.");

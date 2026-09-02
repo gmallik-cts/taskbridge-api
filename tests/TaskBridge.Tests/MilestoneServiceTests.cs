@@ -54,6 +54,84 @@ public sealed class MilestoneServiceTests
     }
 
     [Fact]
+    public async Task ReopenAsync_ShouldChangeCompletedToInProgressAndPublishAuditData()
+    {
+        var organizationId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var project = await SeedProjectAsync(organizationId);
+        await AddMembersAsync(project, actorId, actorId, Guid.NewGuid());
+        var milestone = new Milestone { OrganizationId = organizationId, ProjectId = project.Entity.Id, Name = "Launch", Status = MilestoneStatus.Completed };
+        await project.Context.Milestones.AddAsync(milestone);
+        await project.Context.SaveChangesAsync();
+        var publisher = new RecordingPublisher();
+        var token = milestone.ConcurrencyToken;
+
+        var result = await CreateService(project.Context, organizationId, actorId, publisher).ReopenAsync(milestone.Id, new ReopenMilestoneRequest { ConcurrencyToken = token });
+
+        Assert.Equal(MilestoneStatus.InProgress, result!.Status);
+        Assert.NotEqual(token, result.ConcurrencyToken);
+        var lifecycleEvent = Assert.Single(publisher.Events);
+        Assert.Equal("MILESTONE_REOPENED", lifecycleEvent.EventType);
+        Assert.Contains("Completed", lifecycleEvent.PreviousStateSnapshot);
+        Assert.Contains("InProgress", lifecycleEvent.NewStateSnapshot);
+        Assert.Equal(2, lifecycleEvent.Recipients.Count);
+    }
+
+    [Theory]
+    [InlineData(MilestoneStatus.Planned)]
+    [InlineData(MilestoneStatus.InProgress)]
+    public async Task ReopenAsync_ShouldRejectNonCompletedMilestones(MilestoneStatus status)
+    {
+        var organizationId = Guid.NewGuid();
+        var project = await SeedProjectAsync(organizationId);
+        await AddMembersAsync(project, Guid.NewGuid());
+        var milestone = new Milestone { OrganizationId = organizationId, ProjectId = project.Entity.Id, Name = "Launch", Status = status };
+        await project.Context.Milestones.AddAsync(milestone);
+        await project.Context.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<ConcurrencyConflictException>(() => CreateService(project.Context, organizationId, Guid.NewGuid(), new RecordingPublisher()).ReopenAsync(milestone.Id, new ReopenMilestoneRequest { ConcurrencyToken = milestone.ConcurrencyToken }));
+    }
+
+    [Fact]
+    public async Task ReopenAsync_ShouldCaptureTrustedIpAndRejectStaleTokenAndOtherTenant()
+    {
+        var organizationId = Guid.NewGuid();
+        var project = await SeedProjectAsync(organizationId);
+        await AddMembersAsync(project, Guid.NewGuid());
+        var milestone = new Milestone { OrganizationId = organizationId, ProjectId = project.Entity.Id, Name = "Launch", Status = MilestoneStatus.Completed };
+        await project.Context.Milestones.AddAsync(milestone);
+        await project.Context.SaveChangesAsync();
+        var publisher = new RecordingPublisher();
+        var service = CreateService(project.Context, organizationId, Guid.NewGuid(), publisher, "2001:db8::1");
+
+        await Assert.ThrowsAsync<ConcurrencyConflictException>(() => service.ReopenAsync(milestone.Id, new ReopenMilestoneRequest { ConcurrencyToken = Guid.NewGuid() }));
+        Assert.Null(await CreateService(project.Context, Guid.NewGuid(), Guid.NewGuid(), new RecordingPublisher()).ReopenAsync(milestone.Id, new ReopenMilestoneRequest { ConcurrencyToken = milestone.ConcurrencyToken }));
+        await service.ReopenAsync(milestone.Id, new ReopenMilestoneRequest { ConcurrencyToken = milestone.ConcurrencyToken });
+
+        Assert.Equal("2001:db8::1", Assert.Single(publisher.Events).ActorIpAddress);
+    }
+
+    [Fact]
+    public async Task ReopenAsync_ShouldAllowReopeningAgainAfterCompletion()
+    {
+        var organizationId = Guid.NewGuid();
+        var project = await SeedProjectAsync(organizationId);
+        await AddMembersAsync(project, Guid.NewGuid());
+        var milestone = new Milestone { OrganizationId = organizationId, ProjectId = project.Entity.Id, Name = "Launch", Status = MilestoneStatus.Completed };
+        await project.Context.Milestones.AddAsync(milestone);
+        await project.Context.SaveChangesAsync();
+        var publisher = new RecordingPublisher();
+        var service = CreateService(project.Context, organizationId, Guid.NewGuid(), publisher);
+
+        var first = await service.ReopenAsync(milestone.Id, new ReopenMilestoneRequest { ConcurrencyToken = milestone.ConcurrencyToken });
+        await service.UpdateStatusAsync(milestone.Id, new UpdateMilestoneStatusRequest { ConcurrencyToken = first!.ConcurrencyToken, Status = MilestoneStatus.Completed });
+        var second = await service.ReopenAsync(milestone.Id, new ReopenMilestoneRequest { ConcurrencyToken = milestone.ConcurrencyToken });
+
+        Assert.Equal(MilestoneStatus.InProgress, second!.Status);
+        Assert.Equal(2, publisher.Events.Count(eventItem => eventItem.EventType == "MILESTONE_REOPENED"));
+    }
+
+    [Fact]
     public async Task DeleteAsync_ShouldDispatchBeforeDeletingAndPreserveTenantIsolation()
     {
         var organizationId = Guid.NewGuid();
@@ -92,8 +170,8 @@ public sealed class MilestoneServiceTests
         await Assert.ThrowsAsync<ResourceNotFoundException>(() => CreateService(project.Context, Guid.NewGuid(), Guid.NewGuid(), new RecordingPublisher()).CreateAsync(new CreateMilestoneRequest { ProjectId = project.Entity.Id, Name = "Blocked" }));
     }
 
-    private static MilestoneService CreateService(TaskBridgeDbContext context, Guid organizationId, Guid actorId, RecordingPublisher publisher) =>
-        new(context, new TestTenantContext(organizationId, actorId), publisher, NullLogger<MilestoneService>.Instance);
+    private static MilestoneService CreateService(TaskBridgeDbContext context, Guid organizationId, Guid actorId, RecordingPublisher publisher, string? actorIpAddress = null) =>
+        new(context, new TestTenantContext(organizationId, actorId, actorIpAddress), publisher, NullLogger<MilestoneService>.Instance);
 
     private static async Task<(TaskBridgeDbContext Context, Project Entity)> SeedProjectAsync(Guid organizationId)
     {
@@ -127,11 +205,12 @@ public sealed class MilestoneServiceTests
         }
     }
 
-    private sealed class TestTenantContext(Guid organizationId, Guid actorId) : ITenantContext
+    private sealed class TestTenantContext(Guid organizationId, Guid actorId, string? actorIpAddress = null) : ITenantContext
     {
         public bool IsAuthenticated => true;
         public Guid? OrganizationId => organizationId;
         public bool TryGetOrganizationId(out Guid value) { value = organizationId; return true; }
         public bool TryGetActorUserId(out Guid value) { value = actorId; return true; }
+        public string? ActorIpAddress => actorIpAddress;
     }
 }

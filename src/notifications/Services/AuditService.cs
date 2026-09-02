@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using TaskBridge.Notifications.DTOs;
 using TaskBridge.Notifications.Models;
@@ -14,7 +15,7 @@ public interface IAuditService
 
 public sealed class AuditService(IAuditEntryRepository audits, INotificationRepository notifications, ITenantContext tenantContext) : IAuditService
 {
-    private static readonly HashSet<string> EventTypes = ["ProjectCreated", "ProjectUpdated", "ProjectDeleted", "MilestoneCreated", "MilestoneStatusUpdated", "MilestoneDeleted"];
+    private static readonly HashSet<string> EventTypes = ["ProjectCreated", "ProjectUpdated", "ProjectDeleted", "MilestoneCreated", "MilestoneStatusUpdated", "MilestoneDeleted", "MILESTONE_REOPENED"];
     private static readonly HashSet<string> EntityTypes = ["Project", "Milestone"];
 
     public async Task<AuditCreateResponse> CreateAsync(CreateAuditRequest request, CancellationToken cancellationToken)
@@ -28,7 +29,7 @@ public sealed class AuditService(IAuditEntryRepository audits, INotificationRepo
             throw new ConflictOperationException("SourceEventId has already been used for a different event.");
         }
         var now = DateTime.UtcNow;
-        var entry = new AuditEntry(Guid.NewGuid(), request.SourceEventId, request.EventType!, request.EntityType!, request.EntityId, request.ProjectId, request.MilestoneId, request.ActorUserId, organizationId, request.PreviousStateSnapshot, request.NewStateSnapshot, request.Timestamp, now);
+        var entry = new AuditEntry(Guid.NewGuid(), request.SourceEventId, request.EventType!, request.EntityType!, request.EntityId, request.ProjectId, request.MilestoneId, request.ActorUserId, organizationId, request.PreviousStateSnapshot, request.NewStateSnapshot, request.Timestamp, now, request.ActorIpAddress);
         await audits.AddAsync(entry, cancellationToken);
         var recipients = request.Recipients!.Distinct().Select(userId => new Notification(Guid.NewGuid(), userId, organizationId, request.EventType!, request.ProjectId, request.MilestoneId, entry.Id, BuildMessage(request), now)).ToList();
         await notifications.AddRangeAsync(recipients, cancellationToken);
@@ -55,6 +56,7 @@ public sealed class AuditService(IAuditEntryRepository audits, INotificationRepo
         if (request.EventType is null || !EventTypes.Contains(request.EventType) || request.EntityType is null || !EntityTypes.Contains(request.EntityType)) throw new ArgumentException("Unsupported event or entity type.");
         if ((request.EntityType == "Project" && request.MilestoneId.HasValue) || (request.EntityType == "Milestone" && !request.MilestoneId.HasValue) || (request.EntityType == "Milestone" && request.EntityId != request.MilestoneId)) throw new ArgumentException("Invalid event/entity combination.");
         if (request.Timestamp.Kind != DateTimeKind.Utc || request.Timestamp > DateTime.UtcNow.AddMinutes(5) || request.Timestamp < DateTime.UtcNow.AddDays(-30)) throw new ArgumentException("Timestamp must be a recent UTC value.");
+        if (request.ActorIpAddress is not null && (!IPAddress.TryParse(request.ActorIpAddress, out var address) || address.ToString() != request.ActorIpAddress)) throw new ArgumentException("Actor IP address must be a normalized IPv4 or IPv6 address.");
         ValidateSnapshot(request.PreviousStateSnapshot, request.NewStateSnapshot, request.EventType);
         if (request.Recipients is null || request.Recipients.Count == 0 || request.Recipients.Any(x => x == Guid.Empty)) throw new ArgumentException("Recipients must contain non-empty GUIDs.");
     }
@@ -72,9 +74,9 @@ public sealed class AuditService(IAuditEntryRepository audits, INotificationRepo
         if ((creation && (previous is not null || next is null)) || (deletion && (previous is null || next is not null)) || (!creation && !deletion && (previous is null || next is null))) throw new ArgumentException("Snapshots do not match the event type.");
     }
 
-    private static bool Matches(AuditEntry entry, CreateAuditRequest request, Guid organizationId) => entry.ActorOrganizationId == organizationId && entry.EventType == request.EventType && entry.EntityId == request.EntityId && entry.ProjectId == request.ProjectId && entry.ActorUserId == request.ActorUserId && entry.Timestamp == request.Timestamp && entry.PreviousStateSnapshot == request.PreviousStateSnapshot && entry.NewStateSnapshot == request.NewStateSnapshot;
+    private static bool Matches(AuditEntry entry, CreateAuditRequest request, Guid organizationId) => entry.ActorOrganizationId == organizationId && entry.EventType == request.EventType && entry.EntityId == request.EntityId && entry.ProjectId == request.ProjectId && entry.ActorUserId == request.ActorUserId && entry.Timestamp == request.Timestamp && entry.PreviousStateSnapshot == request.PreviousStateSnapshot && entry.NewStateSnapshot == request.NewStateSnapshot && entry.ActorIpAddress == request.ActorIpAddress;
     private static string BuildMessage(CreateAuditRequest request) => $"{request.EventType} for project {request.ProjectId}";
-    private static AuditResponse ToResponse(AuditEntry x) => new(x.Id, x.EventType, x.EntityType, x.EntityId, x.ActorUserId, x.ActorOrganizationId, x.PreviousStateSnapshot, x.NewStateSnapshot, x.Timestamp);
+    private static AuditResponse ToResponse(AuditEntry x) => new(x.Id, x.EventType, x.EntityType, x.EntityId, x.ActorUserId, x.ActorOrganizationId, x.PreviousStateSnapshot, x.NewStateSnapshot, x.Timestamp, x.ActorIpAddress);
     internal static void ValidatePaging(int pageNumber, int pageSize) { if (pageNumber < 1 || pageSize < 1 || pageSize > 100) throw new ArgumentException("Invalid pagination."); }
     private static int Pages(int count, int size) => count == 0 ? 0 : (count + size - 1) / size;
 }
