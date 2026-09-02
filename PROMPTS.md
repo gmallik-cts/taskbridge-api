@@ -826,3 +826,282 @@ existing PostgreSQL database.
 
 This migration requirement was identified as part of the implementation review
 and should be documented in the final README and deployment instructions.
+
+## Prompt 8 — Notification & Audit Service Specification
+
+### Exact Prompt
+
+Act as a senior software architect and .NET API designer.
+
+Before implementing the Notification & Audit Service, create a specification
+document named SPEC.md in the repository root.
+
+Review the existing Project API implementation, the assignment requirements,
+README.md, REVIEW.md, and PROMPTS.md before writing the specification.
+
+Do not implement the Notification & Audit Service yet.
+Do not modify the existing Project API in this step.
+This step is documentation and design only.
+
+The specification must describe a new Notification & Audit Service located at:
+
+src/notifications/
+
+The service will integrate with the existing Project API and support Project
+milestone lifecycle events.
+
+SPEC.md must include the following sections.
+
+1. Purpose and Scope
+
+Explain:
+
+- The purpose of the Notification & Audit Service.
+- Its responsibilities.
+- What functionality belongs to the Project API versus the Notification &
+  Audit Service.
+- The scope of the initial implementation.
+
+2. Architecture and Service Boundaries
+
+Describe:
+
+- The relationship between the Project API and Notification & Audit Service.
+- The integration contract between the services.
+- How Project lifecycle events will result in audit entries and notifications.
+- How the design supports multi-tenant isolation.
+
+Keep the design simple and appropriate for the assignment.
+
+3. Data Models
+
+Define the proposed data models and field types.
+
+Audit entry must capture at minimum:
+
+- Id
+- EventType
+- EntityType
+- EntityId
+- ActorUserId
+- ActorOrganizationId
+- PreviousStateSnapshot
+- NewStateSnapshot
+- Timestamp
+
+Also define how audit entries are made immutable.
+
+Notification must capture at minimum:
+
+- Id
+- RecipientUserId
+- EventType
+- ProjectId
+- Message
+- IsRead
+- CreatedAt
+
+Include any additional fields required for multi-tenant isolation if appropriate.
+
+4. API Contracts
+
+Define the contracts for:
+
+- POST /audit
+- GET /audit/{projectId}
+- GET /notifications/{userId}
+- PATCH /notifications/{id}/read
+
+For each endpoint specify:
+
+- Request data
+- Response data
+- Authentication and authorization expectations
+- Tenant isolation requirements
+- Validation behavior
+- Expected error responses.
+
+5. Integration with Project Service
+
+Describe how the Project API will communicate lifecycle events to the Notification
+& Audit Service.
+
+The initial milestone events must support:
+
+- Project or milestone creation where applicable
+- Milestone status update
+- Milestone deletion
+
+For each event, describe what information must be provided to create:
+
+- An audit entry
+- Notifications for relevant team members
+
+Do not introduce Kafka, RabbitMQ, Azure Service Bus, or other infrastructure
+unless it is required by the assignment.
+
+Choose the simplest reasonable integration approach for this repository and
+explain the trade-off.
+
+6. Multi-Tenant Security
+
+Describe:
+
+- How OrganizationId is obtained.
+- How tenant boundaries are enforced.
+- How cross-organization access to audit logs and notifications is prevented.
+- Why tenant identifiers must not be trusted when supplied directly by clients.
+
+7. Immutability
+
+Clearly explain:
+
+- Why audit entries must be immutable.
+- Which operations are allowed.
+- Which operations must not exist.
+- How the API and service design prevent modification or deletion of audit
+  history.
+
+8. Validation and Error Handling
+
+Describe:
+
+- Required validation.
+- Invalid identifier handling.
+- Date range validation.
+- Event type validation.
+- Not-found behavior.
+- Forbidden cross-tenant access.
+- Consistent error response expectations.
+
+9. Testing Requirements
+
+Explicitly include at least these required scenarios:
+
+1. Notifications are dispatched to all relevant team members.
+2. An audit entry is created when a milestone is updated.
+3. An audit entry cannot be deleted or overwritten.
+4. Audit history is filtered correctly by date range.
+5. Audit history is filtered correctly by event type.
+6. A cross-organization user cannot access another organization's audit log.
+
+Also identify any additional high-value tenant isolation or validation tests.
+
+10. Implementation Sequence
+
+Provide a short recommended implementation order that minimizes risk and avoids
+breaking the existing Project API.
+
+11. Copilot and Human Judgment
+
+Include two subsections:
+
+### Where Copilot Helped
+
+Describe how GitHub Copilot was used for:
+
+- Initial design assistance
+- Contract and model scaffolding
+- Test planning
+
+### Where Human Judgment Was Applied
+
+Describe decisions requiring human review, including:
+
+- Tenant security boundaries
+- Audit immutability
+- Service integration simplicity
+- Avoiding unnecessary infrastructure
+- Validation of generated design assumptions
+
+Constraints:
+
+1. Create only SPEC.md in this step unless a minor documentation reference is
+   necessary.
+2. Do not create the Notification & Audit Service implementation yet.
+3. Do not modify the Project API implementation.
+4. Keep the architecture simple.
+5. Do not introduce unnecessary microservice infrastructure.
+6. Make the specification concrete enough that the next implementation prompt
+   can be executed without guessing.
+
+After creating SPEC.md:
+
+1. Summarize the design decisions.
+2. List every file modified.
+3. Identify assumptions or decisions that should be reviewed before implementation.
+
+### Copilot Feature
+
+GitHub Copilot Chat — Agent Mode
+
+### Prompting Technique
+
+Role-Based + Decomposition + Specificity + Constraint
+
+### Rationale
+
+A specification was intentionally created before implementation because the
+assignment requires the Notification & Audit Service design to be documented
+before code is generated.
+
+Role-based prompting asked Copilot to approach the task as a senior software
+architect and .NET API designer.
+
+Decomposition was used to break the specification into clear areas including
+service boundaries, data models, API contracts, integration, multi-tenant
+security, immutability, validation, testing, and implementation sequencing.
+
+Specificity ensured that all mandatory assignment requirements were explicitly
+included in the specification rather than leaving implementation details for
+Copilot to infer.
+
+Constraints prevented implementation work from starting before the specification
+was completed and kept the design focused on the assignment without introducing
+unnecessary infrastructure such as message brokers or event buses.
+
+Agent Mode was selected because Copilot needed to inspect the existing
+repository and create a new repository-level specification document.
+
+### Result
+
+Copilot created SPEC.md in the repository root.
+
+The specification defines the planned Notification & Audit Service located under:
+
+src/notifications/
+
+It documents:
+
+- The service purpose and scope.
+- Architecture and service boundaries.
+- Integration with the Project API.
+- Audit and Notification data models.
+- Required API contracts.
+- Multi-tenant security requirements.
+- Audit immutability requirements.
+- Validation and error handling expectations.
+- Required testing scenarios.
+- Recommended implementation sequence.
+- Areas where Copilot assisted.
+- Areas requiring human judgment.
+
+The implementation of the Notification & Audit Service was intentionally not
+started during this step.
+
+### Human Review
+
+The specification was reviewed before proceeding to implementation to ensure:
+
+- Required audit fields were included.
+- Required notification fields were included.
+- Organization boundaries were enforced.
+- Audit entries were designed as immutable.
+- Required API endpoints were included.
+- Required test scenarios were planned.
+- The integration approach did not introduce unnecessary infrastructure.
+
+### Validation
+
+- SPEC.md created successfully.
+- No Project API implementation changes were made in this step.
