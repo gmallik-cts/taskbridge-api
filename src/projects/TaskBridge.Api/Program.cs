@@ -21,7 +21,7 @@ builder.Services.AddHttpClient<ILifecycleEventPublisher, LifecycleEventPublisher
     .ConfigureHttpClient((serviceProvider, client) =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-    client.BaseAddress = new Uri(configuration["NotificationIntegration:BaseUrl"] ?? "https://localhost:7001/");
+    client.BaseAddress = new Uri(configuration["NotificationIntegration:BaseUrl"] ?? "https://localhost:5000/");
     client.Timeout = TimeSpan.FromSeconds(10);
 });
 

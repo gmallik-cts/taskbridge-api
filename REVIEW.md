@@ -312,3 +312,19 @@ The highest-priority remediation areas are:
 
 No generated code was modified before this review was completed. The findings
 in this document will be used as the basis for the remediation phase.
+
+### Local Integration Configuration Review
+
+During manual application startup, the Project API was listening on
+http://localhost:5021 and the Notification & Audit Service was listening on
+http://localhost:5000.
+
+The Project API configuration initially referenced https://localhost:7001,
+which did not match the actual local Notification Service endpoint.
+
+The configuration was manually corrected to:
+
+http://localhost:5000/
+
+This was a local environment configuration correction and did not change the
+service architecture or business behavior.
